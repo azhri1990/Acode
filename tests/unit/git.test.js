@@ -103,3 +103,24 @@ describe("sync", () => {
 		await expect(c.git.sync("m")).rejects.toThrow("Cancelled");
 	});
 });
+
+describe("gitflow release/hotfix", () => {
+	it("merges a release into main (tagged) and back into develop", async () => {
+		const { exec, git } = make("## release/1.0\n");
+		await git.finish("release");
+		const cmds = exec.mock.calls.map((c) => c[0]);
+		const idx = (t) => cmds.findIndex((c) => c.includes(t));
+		expect(idx("checkout 'main'")).toBeLessThan(idx("tag '1.0'"));
+		expect(idx("tag '1.0'")).toBeLessThan(idx("checkout 'develop'"));
+		expect(idx("checkout 'develop'")).toBeLessThan(idx("branch -d"));
+	});
+
+	it("explains diverged pulls", async () => {
+		const exec = vi.fn(async (c) => {
+			if (c.includes("status")) return "## main\n";
+			throw new Error("fatal: Not possible to fast-forward");
+		});
+		const g = createGit({ exec, repo: "/r" });
+		await expect(g.pull()).rejects.toThrow("diverged");
+	});
+});

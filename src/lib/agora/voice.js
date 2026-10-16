@@ -1,5 +1,13 @@
 /** Voice helpers built on the Web Speech API (availability depends on the WebView). */
 
+const VOICE_ERRORS = {
+	"not-allowed": "Microphone permission denied",
+	"service-not-allowed": "Speech service not allowed",
+	"no-speech": "No speech detected",
+	"audio-capture": "No microphone available",
+	network: "Speech recognition needs a network connection",
+};
+
 export function isVoiceInputSupported() {
 	return !!(globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition);
 }
@@ -18,7 +26,10 @@ export function listen(lang = "en-US") {
 		rec.lang = lang;
 		rec.interimResults = false;
 		rec.onresult = (e) => resolve(e.results?.[0]?.[0]?.transcript || "");
-		rec.onerror = (e) => reject(new Error(e.error || "Voice input failed"));
+		rec.onerror = (e) =>
+			reject(
+				new Error(VOICE_ERRORS[e.error] || e.error || "Voice input failed"),
+			);
 		rec.onend = () => resolve("");
 		rec.start();
 	});

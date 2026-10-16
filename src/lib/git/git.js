@@ -2,8 +2,13 @@ import { quote, validateName, validateRepoPath } from "./shell";
 
 export const FLOW_KINDS = {
 	feature: { base: "develop", prefix: "feature/" },
-	release: { base: "develop", prefix: "release/" },
-	hotfix: { base: "main", prefix: "hotfix/" },
+	release: {
+		base: "develop",
+		prefix: "release/",
+		target: "main",
+		back: "develop",
+	},
+	hotfix: { base: "main", prefix: "hotfix/", target: "main", back: "develop" },
 };
 
 /** Parse `git status --porcelain=v1 -b` output. */
@@ -55,7 +60,13 @@ export function createGit({ exec, repo, confirm, getToken }) {
 			if (s.conflicts.length) {
 				throw new Error(`Resolve conflicts first: ${s.conflicts.join(", ")}`);
 			}
-			return git("pull --ff-only", { auth: true });
+			try {
+				return await git("pull --ff-only", { auth: true });
+			} catch (err) {
+				throw new Error(
+					`Pull could not fast-forward (local and remote have diverged). Rebase or merge manually. ${err.message || err}`,
+				);
+			}
 		},
 		async commit(message) {
 			const m = String(message ?? "").trim();
@@ -88,11 +99,19 @@ export function createGit({ exec, repo, confirm, getToken }) {
 				throw new Error(`Current branch is not a ${kind} branch`);
 			}
 			if (s.changes) throw new Error("Commit or stash changes first");
-			await ask(`Merge "${s.branch}" into ${flow.base} and delete it?`);
-			await git(`checkout ${quote(flow.base)}`);
+			const target = flow.target || flow.base;
+			const targets = [target, ...(flow.back ? [flow.back] : [])];
+			await ask(
+				`Merge "${s.branch}" into ${targets.join(" and ")}${kind === "feature" ? "" : ", tag it"} and delete it?`,
+			);
+			await git(`checkout ${quote(target)}`);
 			await git(`merge --no-ff ${quote(s.branch)}`);
 			if (kind !== "feature") {
 				await git(`tag ${quote(s.branch.slice(flow.prefix.length))}`);
+			}
+			if (flow.back) {
+				await git(`checkout ${quote(flow.back)}`);
+				await git(`merge --no-ff ${quote(s.branch)}`);
 			}
 			return git(`branch -d ${quote(s.branch)}`);
 		},

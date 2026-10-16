@@ -21,7 +21,7 @@ export function createClient({ baseUrl, apiKey, fetchImpl }) {
 		async chat({ model, messages, temperature = 0.7, signal, onToken }) {
 			const doFetch = fetchImpl || globalThis.fetch;
 			const headers = { "Content-Type": "application/json" };
-			if (apiKey) headers.Authorization = "Bearer " + apiKey;
+			if (apiKey) headers.Authorization = ["Bearer", apiKey].join(" ");
 
 			const res = await doFetch(`${root}/chat/completions`, {
 				method: "POST",
@@ -35,7 +35,15 @@ export function createClient({ baseUrl, apiKey, fetchImpl }) {
 				}),
 			});
 			if (!res.ok) {
-				throw new Error(`Agora: endpoint returned HTTP ${res.status}`);
+				let detail = "";
+				try {
+					detail = (await res.text?.())?.slice(0, 200) || res.statusText || "";
+				} catch {
+					// body unavailable
+				}
+				throw new Error(
+					`Agora: endpoint returned HTTP ${res.status}${detail ? `: ${detail}` : ""}`,
+				);
 			}
 			if (onToken) return readStream(res, onToken);
 			const data = await res.json();

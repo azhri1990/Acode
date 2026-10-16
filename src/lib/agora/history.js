@@ -6,7 +6,7 @@ export const PRESETS = [
 	{ name: "Local (Ollama)", baseUrl: "http://127.0.0.1:11434/v1" },
 	{ name: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1" },
 	{ name: "OpenAI", baseUrl: "https://api.openai.com/v1" },
-	{ name: "Tailscale host", baseUrl: "http://100.x.y.z:11434/v1" },
+	{ name: "Tailscale host (edit IP)", baseUrl: "http://100.64.0.1:11434/v1" },
 ];
 
 /**

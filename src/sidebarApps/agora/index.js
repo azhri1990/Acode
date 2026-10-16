@@ -168,6 +168,7 @@ function initApp(container) {
 		add("You", task);
 		const live = {};
 		const onToken = (who, delta) => {
+			if (ctrl.signal.aborted) return;
 			if (!live.who || live.who !== who) {
 				live.who = who;
 				live.pre = document.createElement("pre");
