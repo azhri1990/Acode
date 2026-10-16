@@ -6,7 +6,7 @@
 /**
  * @param {object} config
  * @param {string} config.baseUrl e.g. http://127.0.0.1:11434/v1
- * @param {string} [config.apiKey] sent as a ****** when present
+ * @param {string} [config.apiKey] sent as an Authorization bearer header when present
  * @param {typeof fetch} [config.fetchImpl]
  */
 export function createClient({ baseUrl, apiKey, fetchImpl }) {
@@ -21,7 +21,7 @@ export function createClient({ baseUrl, apiKey, fetchImpl }) {
 		async chat({ model, messages, temperature = 0.7 }) {
 			const doFetch = fetchImpl || globalThis.fetch;
 			const headers = { "Content-Type": "application/json" };
-			if (apiKey) headers.Authorization = `******;
+			if (apiKey) headers.Authorization = "Bearer " + apiKey;
 
 			const res = await doFetch(`${root}/chat/completions`, {
 				method: "POST",

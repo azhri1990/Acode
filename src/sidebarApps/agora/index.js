@@ -39,7 +39,11 @@ function initApp(container) {
 		/>
 	);
 	const $key = (
-		<input type="password" placeholder="API key (optional)" value={cfg.apiKey || ""} />
+		<input
+			type="password"
+			placeholder="API key (optional)"
+			value={cfg.apiKey || ""}
+		/>
 	);
 	const $model = <input placeholder="Model id" value={cfg.model || ""} />;
 	const $task = <textarea placeholder="Ask the agents..." rows="3" />;
@@ -85,7 +89,11 @@ function initApp(container) {
 		}
 	};
 
-	container.content = <div className="header"><div className="title">Agora</div></div>;
+	container.content = (
+		<div className="header">
+			<div className="title">Agora</div>
+		</div>
+	);
 	container.append(
 		<div className="agora">
 			{$base}
@@ -94,8 +102,12 @@ function initApp(container) {
 			{$log}
 			{$task}
 			<div className="agora-actions">
-				<button type="button" onclick={run}>Send</button>
-				<button type="button" onclick={() => controller?.abort()}>Stop</button>
+				<button type="button" onclick={run}>
+					Send
+				</button>
+				<button type="button" onclick={() => controller?.abort()}>
+					Stop
+				</button>
 				{isVoiceInputSupported() ? (
 					<button
 						type="button"
