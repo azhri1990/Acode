@@ -96,12 +96,12 @@ echo "type : $packageType"
 script4="cordova build android $cordovamode -- --packageType=$packageType"
 
 eval "
-echo \"${RED}$script1${NC}\";
-$script1;
-echo \"${RED}$script2${NC}\";
-$script2&&
+echo \"${RED}$script1${NC}\" &&
+$script1 &&
+echo \"${RED}$script2${NC}\" &&
+$script2 &&
 # echo \"${RED}$script3${NC}\";
 # $script3;
-echo \"${RED}$script4${NC}\";
-$script4;
+echo \"${RED}$script4${NC}\" &&
+$script4
 "
