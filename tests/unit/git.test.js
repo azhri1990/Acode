@@ -67,7 +67,7 @@ describe("git operations", () => {
 		);
 		await git.finish("feature");
 		const cmds = exec.mock.calls.map((c) => c[0]).join("\n");
-		expect(cmds).toContain("merge --no-ff 'feature/x'");
+		expect(cmds).toContain("merge --no-ff --no-edit 'feature/x'");
 		expect(cmds).toContain("branch -d 'feature/x'");
 	});
 

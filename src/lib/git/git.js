@@ -47,6 +47,15 @@ export function createGit({ exec, repo, confirm, getToken }) {
 		}
 		return exec(`git -C ${quote(dir)} ${pre}${args}`);
 	};
+	const merge = async (branch) => {
+		try {
+			await git(`merge --no-ff --no-edit ${quote(branch)}`);
+		} catch (err) {
+			throw new Error(
+				`Merge of "${branch}" failed. Resolve conflicts or run "git merge --abort". ${err.message || err}`,
+			);
+		}
+	};
 	const ask = async (msg) => {
 		if (!confirm || !(await confirm(msg))) throw new Error("Cancelled");
 	};
@@ -105,13 +114,13 @@ export function createGit({ exec, repo, confirm, getToken }) {
 				`Merge "${s.branch}" into ${targets.join(" and ")}${kind === "feature" ? "" : ", tag it"} and delete it?`,
 			);
 			await git(`checkout ${quote(target)}`);
-			await git(`merge --no-ff ${quote(s.branch)}`);
+			await merge(s.branch);
 			if (kind !== "feature") {
 				await git(`tag ${quote(s.branch.slice(flow.prefix.length))}`);
 			}
 			if (flow.back) {
 				await git(`checkout ${quote(flow.back)}`);
-				await git(`merge --no-ff ${quote(s.branch)}`);
+				await merge(s.branch);
 			}
 			return git(`branch -d ${quote(s.branch)}`);
 		},
