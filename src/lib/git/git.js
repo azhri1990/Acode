@@ -92,7 +92,7 @@ export function createGit({ exec, repo, confirm, getToken }) {
 			await git(`checkout ${quote(flow.base)}`);
 			await git(`merge --no-ff ${quote(s.branch)}`);
 			if (kind !== "feature") {
-				await git(`tag -f ${quote(s.branch.slice(flow.prefix.length))}`);
+				await git(`tag ${quote(s.branch.slice(flow.prefix.length))}`);
 			}
 			return git(`branch -d ${quote(s.branch)}`);
 		},

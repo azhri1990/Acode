@@ -84,3 +84,22 @@ describe("git operations", () => {
 		await expect(make("## main\n").git.commit(" ")).rejects.toThrow();
 	});
 });
+
+describe("sync", () => {
+	it("commits dirty trees, pulls, then pushes after confirmation", async () => {
+		const { exec, git } = make("## main\n M a\n");
+		await git.sync("msg");
+		const cmds = exec.mock.calls.map((c) => c[0]);
+		const idx = (t) => cmds.findIndex((c) => c.includes(t));
+		expect(idx("commit -m 'msg'")).toBeLessThan(idx("pull --ff-only"));
+		expect(idx("pull --ff-only")).toBeLessThan(idx("push origin"));
+	});
+
+	it("stops on conflicts and on cancelled push", async () => {
+		await expect(make("## main\nUU a\n").git.sync("m")).rejects.toThrow(
+			"conflicts",
+		);
+		const c = make("## main\n", async () => false);
+		await expect(c.git.sync("m")).rejects.toThrow("Cancelled");
+	});
+});

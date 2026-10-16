@@ -162,7 +162,9 @@ function initApp(container) {
 			return;
 		}
 		controller?.abort();
-		controller = new AbortController();
+		const ctrl = new AbortController();
+		controller = ctrl;
+		const question = $task.value;
 		add("You", task);
 		const live = {};
 		const onToken = (who, delta) => {
@@ -184,7 +186,7 @@ function initApp(container) {
 				client: createClient(config),
 				model: config.model,
 				task,
-				signal: controller.signal,
+				signal: ctrl.signal,
 				agents: parseAgents(config.agents),
 				rounds: config.rounds,
 				onToken,
@@ -193,10 +195,10 @@ function initApp(container) {
 				},
 			});
 			lastAnswer = answer;
-			saveHistory({ task: $task.value, answer });
+			saveHistory({ task: question, answer });
 			if (isVoiceOutputSupported()) speak(answer);
 		} catch (err) {
-			if (!controller.signal.aborted) add("Error", err.message);
+			if (!ctrl.signal.aborted) add("Error", err.message);
 		}
 	};
 
@@ -234,7 +236,8 @@ function initApp(container) {
 						type="button"
 						onclick={async () => {
 							try {
-								$task.value = await listen();
+								const heard = await listen();
+								if (heard) $task.value = heard;
 							} catch (err) {
 								add("Error", err.message);
 							}
