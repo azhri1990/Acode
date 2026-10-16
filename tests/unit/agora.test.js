@@ -102,3 +102,23 @@ describe("streaming and agents", () => {
 		expect(parseAgents("")).toBe(DEFAULT_AGENTS);
 	});
 });
+
+describe("history helpers", () => {
+	it("caps history and builds task context", async () => {
+		const { addChat, buildTask } = await import(
+			"../../src/lib/agora/history.js"
+		);
+		let h = [];
+		for (let i = 0; i < 25; i++)
+			h = addChat(h, { task: `t${i}`, answer: "a" }, i);
+		expect(h).toHaveLength(20);
+		expect(h[0].task).toBe("t24");
+		expect(buildTask("q", null)).toBe("q");
+		expect(buildTask("q", { label: "selection", text: "x" })).toContain(
+			"Context (selection):\nx",
+		);
+		expect(
+			buildTask("q", { label: "file", text: "y".repeat(13000) }),
+		).toContain("(truncated)");
+	});
+});

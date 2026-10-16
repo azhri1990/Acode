@@ -91,6 +91,7 @@ async function loadApps() {
 	add(...(await import("./extensions")).default);
 	add(...(await import("./notification")).default);
 	add(...(await import("./agora")).default);
+	add(...(await import("./git")).default);
 	setSponsorSidebarAppVisibility(appSettings.value.showSponsorSidebarApp);
 }
 

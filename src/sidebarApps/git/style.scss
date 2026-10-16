@@ -1,0 +1,25 @@
+.git-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+
+    input,
+    select {
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .git-actions {
+        display: flex;
+        gap: 6px;
+    }
+
+    .git-log {
+        min-height: 100px;
+        max-height: 40vh;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        user-select: text;
+    }
+}
