@@ -69,7 +69,7 @@ For plugin development information, refer to: [Acode Plugin Documentation](https
 
 ## • AI Agent and Models
 
-For the reviewed Acode AI Agent + OmniRoute setup, local models, and free-tier limitations, see [AI Agent Setup](docs/AI_AGENT_SETUP.md).
+For the Acode AI Agent + OmniRoute setup, local models, and free-tier limitations, see [AI Agent Setup](docs/AI_AGENT_SETUP.md).
 
 This repository also includes curated [Agent Skills](.github/skills/) for common Acode development tasks. Review each skill before using it with a coding agent.
 

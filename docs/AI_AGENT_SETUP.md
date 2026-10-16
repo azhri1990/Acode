@@ -34,6 +34,8 @@ OmniRoute's `auto` route can select and fall back among eligible configured conn
 3. Load models from `/models` if available. If `auto` is not listed, enter `auto` as the model ID manually. The plugin supports custom model IDs and OpenAI-compatible endpoints; OmniRoute documents an OpenAI-compatible `/v1` endpoint.
 4. Select `auto` (or a specific model ID returned by OmniRoute) in the agent and send a small test prompt.
 
+The Acode AI Agent currently limits a custom endpoint's configured model IDs to 50. This does not change OmniRoute's own catalog; add only the models you expect to use in the agent.
+
 Replace `<server-LAN-address>` with the address of the computer running OmniRoute. On Android, `localhost` refers to the phone, not a separate computer. If both services run on the same phone, loopback may work depending on how OmniRoute is hosted.
 
 Use a private trusted network for plain HTTP. For access beyond your private LAN, use HTTPS or a trusted private VPN, require authentication, and do not expose an unauthenticated OmniRoute endpoint to the public internet. Keep the OmniRoute key private; do not commit it to a project or paste it into shared prompts.
