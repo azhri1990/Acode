@@ -1,0 +1,30 @@
+.container.agora-app,
+.agora {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+
+    input,
+    textarea {
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .agora-log {
+        flex: 1;
+        min-height: 120px;
+        overflow-y: auto;
+
+        pre {
+            margin: 2px 0 8px;
+            white-space: pre-wrap;
+            user-select: text;
+        }
+    }
+
+    .agora-actions {
+        display: flex;
+        gap: 6px;
+    }
+}
