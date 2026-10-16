@@ -18,7 +18,7 @@ export function createClient({ baseUrl, apiKey, fetchImpl }) {
 		 * @param {{model:string, messages:{role:string,content:string}[], temperature?:number}} req
 		 * @returns {Promise<string>} assistant text
 		 */
-		async chat({ model, messages, temperature = 0.7, signal }) {
+		async chat({ model, messages, temperature = 0.7, signal, onToken }) {
 			const doFetch = fetchImpl || globalThis.fetch;
 			const headers = { "Content-Type": "application/json" };
 			if (apiKey) headers.Authorization = "Bearer " + apiKey;
@@ -27,11 +27,17 @@ export function createClient({ baseUrl, apiKey, fetchImpl }) {
 				method: "POST",
 				signal,
 				headers,
-				body: JSON.stringify({ model, messages, temperature, stream: false }),
+				body: JSON.stringify({
+					model,
+					messages,
+					temperature,
+					stream: !!onToken,
+				}),
 			});
 			if (!res.ok) {
 				throw new Error(`Agora: endpoint returned HTTP ${res.status}`);
 			}
+			if (onToken) return readStream(res, onToken);
 			const data = await res.json();
 			const text = data?.choices?.[0]?.message?.content;
 			if (typeof text !== "string") {
@@ -40,4 +46,39 @@ export function createClient({ baseUrl, apiKey, fetchImpl }) {
 			return text;
 		},
 	};
+}
+
+/**
+ * Read an OpenAI-style server-sent-events stream, calling onToken per delta.
+ * @returns {Promise<string>} full text
+ */
+async function readStream(res, onToken) {
+	if (!res.body?.getReader) throw new Error("Agora: streaming not supported");
+	const reader = res.body.getReader();
+	const decoder = new TextDecoder();
+	let buffer = "";
+	let full = "";
+	for (;;) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		buffer += decoder.decode(value, { stream: true });
+		const lines = buffer.split("\n");
+		buffer = lines.pop();
+		for (const line of lines) {
+			const t = line.trim();
+			if (!t.startsWith("data:")) continue;
+			const payload = t.slice(5).trim();
+			if (payload === "[DONE]") return full;
+			try {
+				const delta = JSON.parse(payload)?.choices?.[0]?.delta?.content;
+				if (delta) {
+					full += delta;
+					onToken(delta);
+				}
+			} catch {
+				// ignore malformed keep-alive lines
+			}
+		}
+	}
+	return full;
 }

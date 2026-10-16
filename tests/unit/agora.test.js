@@ -61,3 +61,44 @@ describe("client edge cases", () => {
 		);
 	});
 });
+
+describe("streaming and agents", () => {
+	it("streams SSE deltas", async () => {
+		const enc = new TextEncoder();
+		const chunks = [
+			'data: {"choices":[{"delta":{"content":"a"}}]}\n',
+			'data: {"choices":[{"delta":{"content":"b"}}]}\ndata: [DONE]\n',
+		];
+		let i = 0;
+		const fetchImpl = vi.fn().mockResolvedValue({
+			ok: true,
+			body: {
+				getReader: () => ({
+					read: async () =>
+						i < chunks.length
+							? { done: false, value: enc.encode(chunks[i++]) }
+							: { done: true },
+				}),
+			},
+		});
+		const tokens = [];
+		const c = createClient({ baseUrl: "http://x", fetchImpl });
+		const out = await c.chat({
+			model: "m",
+			messages: [],
+			onToken: (d) => tokens.push(d),
+		});
+		expect(out).toBe("ab");
+		expect(tokens).toEqual(["a", "b"]);
+	});
+
+	it("parses agents with optional model", async () => {
+		const { parseAgents, DEFAULT_AGENTS } = await import(
+			"../../src/lib/agora/orchestrator.js"
+		);
+		expect(parseAgents("A | do x | gpt\nbad")).toEqual([
+			{ name: "A", prompt: "do x", model: "gpt" },
+		]);
+		expect(parseAgents("")).toBe(DEFAULT_AGENTS);
+	});
+});

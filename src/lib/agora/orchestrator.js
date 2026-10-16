@@ -27,6 +27,7 @@ export const DEFAULT_AGENTS = [
  * @param {{name:string,prompt:string,model?:string}[]} [opts.agents]
  * @param {number} [opts.rounds=1]
  * @param {(turn:{round:number,agent:string,content:string})=>void} [opts.onTurn]
+ * @param {(agent:string,delta:string)=>void} [opts.onToken] streaming callback
  * @param {AbortSignal} [opts.signal]
  * @returns {Promise<{transcript:object[], answer:string}>}
  */
@@ -37,6 +38,7 @@ export async function runAgora({
 	agents = DEFAULT_AGENTS,
 	rounds = 1,
 	onTurn,
+	onToken,
 	signal,
 }) {
 	if (!task?.trim()) throw new Error("Agora: task is empty");
@@ -51,6 +53,7 @@ export async function runAgora({
 			if (signal?.aborted) throw new Error("Agora: aborted");
 			const content = await client.chat({
 				signal,
+				onToken: onToken && ((d) => onToken(agent.name, d)),
 				model: agent.model || model,
 				messages: [
 					{
@@ -72,6 +75,7 @@ export async function runAgora({
 	if (signal?.aborted) throw new Error("Agora: aborted");
 	const answer = await client.chat({
 		signal,
+		onToken: onToken && ((d) => onToken("Moderator", d)),
 		model,
 		temperature: 0.3,
 		messages: [
@@ -87,4 +91,24 @@ export async function runAgora({
 		],
 	});
 	return { transcript, answer };
+}
+
+/**
+ * Parse agents from lines of "Name | prompt | optional model".
+ * @param {string} text
+ */
+export function parseAgents(text) {
+	const agents = [];
+	for (const line of String(text || "").split("\n")) {
+		const [name, prompt, model] = line.split("|").map((p) => p.trim());
+		if (!name || !prompt) continue;
+		agents.push(model ? { name, prompt, model } : { name, prompt });
+	}
+	return agents.length ? agents : DEFAULT_AGENTS;
+}
+
+export function formatAgents(agents) {
+	return agents
+		.map((a) => [a.name, a.prompt, a.model].filter(Boolean).join(" | "))
+		.join("\n");
 }

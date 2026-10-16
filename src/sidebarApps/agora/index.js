@@ -1,6 +1,11 @@
 import "./style.scss";
 import { createClient } from "lib/agora/client";
-import { runAgora } from "lib/agora/orchestrator";
+import {
+	DEFAULT_AGENTS,
+	formatAgents,
+	parseAgents,
+	runAgora,
+} from "lib/agora/orchestrator";
 import {
 	isVoiceInputSupported,
 	isVoiceOutputSupported,
@@ -42,6 +47,22 @@ function initApp(container) {
 		<input type="password" placeholder="API key (optional)" value="" />
 	);
 	const $model = <input placeholder="Model id" value={cfg.model || ""} />;
+	const $agents = (
+		<textarea
+			rows="4"
+			title="One agent per line: Name | role prompt | optional model"
+			value={cfg.agents || formatAgents(DEFAULT_AGENTS)}
+		/>
+	);
+	const $rounds = (
+		<input
+			type="number"
+			min="1"
+			max="5"
+			value={cfg.rounds || 1}
+			title="Rounds"
+		/>
+	);
 	const $task = <textarea placeholder="Ask the agents..." rows="3" />;
 	const $log = <div className="agora-log scroll" />;
 
@@ -60,6 +81,8 @@ function initApp(container) {
 			baseUrl: $base.value.trim(),
 			apiKey: $key.value,
 			model: $model.value.trim(),
+			agents: $agents.value,
+			rounds: Math.min(5, Math.max(1, Number($rounds.value) || 1)),
 		};
 		const { apiKey: _secret, ...persisted } = config;
 		localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted));
@@ -71,15 +94,34 @@ function initApp(container) {
 		controller?.abort();
 		controller = new AbortController();
 		add("You", task);
+		const live = {};
+		const onToken = (who, delta) => {
+			if (!live.who || live.who !== who) {
+				live.who = who;
+				live.pre = document.createElement("pre");
+				const $turn = document.createElement("div");
+				$turn.className = "agora-turn";
+				const $b = document.createElement("b");
+				$b.textContent = who;
+				$turn.append($b, live.pre);
+				$log.append($turn);
+			}
+			live.pre.textContent += delta;
+			$log.scrollTop = $log.scrollHeight;
+		};
 		try {
 			const { answer } = await runAgora({
 				client: createClient(config),
 				model: config.model,
 				task,
 				signal: controller.signal,
-				onTurn: (t) => add(t.agent, t.content),
+				agents: parseAgents(config.agents),
+				rounds: config.rounds,
+				onToken,
+				onTurn: () => {
+					live.who = null;
+				},
 			});
-			add("Moderator", answer);
 			if (isVoiceOutputSupported()) speak(answer);
 		} catch (err) {
 			if (!controller.signal.aborted) add("Error", err.message);
@@ -96,6 +138,8 @@ function initApp(container) {
 			{$base}
 			{$key}
 			{$model}
+			{$agents}
+			{$rounds}
 			{$log}
 			{$task}
 			<div className="agora-actions">
