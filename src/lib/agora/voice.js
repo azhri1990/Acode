@@ -19,6 +19,7 @@ export function listen(lang = "en-US") {
 		rec.interimResults = false;
 		rec.onresult = (e) => resolve(e.results?.[0]?.[0]?.transcript || "");
 		rec.onerror = (e) => reject(new Error(e.error || "Voice input failed"));
+		rec.onend = () => resolve("");
 		rec.start();
 	});
 }

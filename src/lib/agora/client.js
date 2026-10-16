@@ -18,13 +18,14 @@ export function createClient({ baseUrl, apiKey, fetchImpl }) {
 		 * @param {{model:string, messages:{role:string,content:string}[], temperature?:number}} req
 		 * @returns {Promise<string>} assistant text
 		 */
-		async chat({ model, messages, temperature = 0.7 }) {
+		async chat({ model, messages, temperature = 0.7, signal }) {
 			const doFetch = fetchImpl || globalThis.fetch;
 			const headers = { "Content-Type": "application/json" };
 			if (apiKey) headers.Authorization = "Bearer " + apiKey;
 
 			const res = await doFetch(`${root}/chat/completions`, {
 				method: "POST",
+				signal,
 				headers,
 				body: JSON.stringify({ model, messages, temperature, stream: false }),
 			});

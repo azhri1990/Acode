@@ -39,11 +39,7 @@ function initApp(container) {
 		/>
 	);
 	const $key = (
-		<input
-			type="password"
-			placeholder="API key (optional)"
-			value={cfg.apiKey || ""}
-		/>
+		<input type="password" placeholder="API key (optional)" value="" />
 	);
 	const $model = <input placeholder="Model id" value={cfg.model || ""} />;
 	const $task = <textarea placeholder="Ask the agents..." rows="3" />;
@@ -65,7 +61,8 @@ function initApp(container) {
 			apiKey: $key.value,
 			model: $model.value.trim(),
 		};
-		localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+		const { apiKey: _secret, ...persisted } = config;
+		localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted));
 		const task = $task.value;
 		if (!config.baseUrl || !config.model || !task.trim()) {
 			add("Agora", "Set endpoint, model and a question first.");
@@ -85,7 +82,7 @@ function initApp(container) {
 			add("Moderator", answer);
 			if (isVoiceOutputSupported()) speak(answer);
 		} catch (err) {
-			add("Error", err.message);
+			if (!controller.signal.aborted) add("Error", err.message);
 		}
 	};
 

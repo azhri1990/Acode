@@ -49,3 +49,15 @@ describe("runAgora", () => {
 		).rejects.toThrow("aborted");
 	});
 });
+
+describe("client edge cases", () => {
+	it("rejects malformed responses", async () => {
+		const fetchImpl = vi
+			.fn()
+			.mockResolvedValue({ ok: true, json: async () => ({}) });
+		const c = createClient({ baseUrl: "http://x", fetchImpl });
+		await expect(c.chat({ model: "m", messages: [] })).rejects.toThrow(
+			"unexpected",
+		);
+	});
+});

@@ -50,6 +50,7 @@ export async function runAgora({
 		for (const agent of agents) {
 			if (signal?.aborted) throw new Error("Agora: aborted");
 			const content = await client.chat({
+				signal,
 				model: agent.model || model,
 				messages: [
 					{
@@ -70,6 +71,7 @@ export async function runAgora({
 
 	if (signal?.aborted) throw new Error("Agora: aborted");
 	const answer = await client.chat({
+		signal,
 		model,
 		temperature: 0.3,
 		messages: [
