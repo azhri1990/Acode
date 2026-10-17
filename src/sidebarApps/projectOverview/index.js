@@ -39,12 +39,14 @@ function initApp(el) {
 	files.on("add-folder", refresh);
 	files.on("remove-folder", refresh);
 	files.on("refresh", refresh);
+	editorManager.on(["add-folder", "remove-folder"], refresh);
 
 	return () => {
 		renderVersion += 1;
 		files.off("add-folder", refresh);
 		files.off("remove-folder", refresh);
 		files.off("refresh", refresh);
+		editorManager.off(["add-folder", "remove-folder"], refresh);
 		refreshButton.removeEventListener("click", refresh);
 		container = null;
 	};
@@ -73,7 +75,7 @@ async function render() {
 	header.append(title, refreshButton);
 	container.append(header);
 
-	const roots = addedFolder.filter(({ listFiles }) => listFiles);
+	const roots = addedFolder;
 	if (!roots.length) {
 		const empty = document.createElement("button");
 		empty.type = "button";
@@ -85,7 +87,9 @@ async function render() {
 	}
 
 	try {
-		await fileIndex.whenReady(roots.map(({ url }) => url));
+		await fileIndex.whenReady(
+			roots.filter(({ listFiles }) => listFiles).map(({ url }) => url),
+		);
 	} catch (_) {
 		// Continue with the entries already available in the file list.
 	}
@@ -93,6 +97,22 @@ async function render() {
 
 	const fallbackFiles = files();
 	for (const root of roots) {
+		const section = document.createElement("section");
+		section.className = "project-overview-workspace";
+
+		const heading = document.createElement("h3");
+		heading.textContent = root.title;
+		heading.title = root.url;
+		section.append(heading);
+
+		if (!root.listFiles) {
+			const hint = document.createElement("p");
+			hint.textContent = strings["info-listFiles"];
+			section.append(hint);
+			container.append(section);
+			continue;
+		}
+
 		let entries = fallbackFiles.filter((file) =>
 			isWithinRoot(file.url, root.url),
 		);
@@ -106,14 +126,6 @@ async function render() {
 		if (!container || version !== renderVersion) return;
 
 		const summary = summarizeProjectFiles(entries, KEY_FILE_NAMES);
-		const section = document.createElement("section");
-		section.className = "project-overview-workspace";
-
-		const heading = document.createElement("h3");
-		heading.textContent = root.title;
-		heading.title = root.url;
-		section.append(heading);
-
 		const count = document.createElement("div");
 		count.className = "project-overview-count";
 		count.textContent = `${summary.total}${summary.truncated ? "+" : ""} ${strings["files"]}`;
