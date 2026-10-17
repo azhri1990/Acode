@@ -198,31 +198,34 @@ async function onDeviceReady() {
 		enumerable: false,
 	});
 
-	try {
-		await helpers.promisify(iap.startConnection).catch((e) => {
-			window.log("error", "connection error");
-			window.log("error", e);
-		});
-
-		if (localStorage.acode_pro === "true") {
-			config.HAS_PRO = true;
-		}
-
-		if (navigator.onLine) {
-			const purchases = await helpers.promisify(iap.getPurchases);
-			const isPro = purchases.find((p) =>
-				p.productIds.includes("acode_pro_new"),
-			);
-			if (isPro) {
-				config.HAS_PRO = true;
-			} else {
-				config.HAS_PRO = !isFreePackage;
-			}
-		}
-	} catch (error) {
-		window.log("error", "Purchase error");
-		window.log("error", error);
+	if (localStorage.acode_pro === "true") {
+		config.HAS_PRO = true;
 	}
+
+	// Verify purchases in the background so startup is not blocked by the network
+	(async () => {
+		try {
+			await helpers.promisify(iap.startConnection).catch((e) => {
+				window.log("error", "connection error");
+				window.log("error", e);
+			});
+
+			if (navigator.onLine) {
+				const purchases = await helpers.promisify(iap.getPurchases);
+				const isPro = purchases.find((p) =>
+					p.productIds.includes("acode_pro_new"),
+				);
+				if (isPro) {
+					config.HAS_PRO = true;
+				} else {
+					config.HAS_PRO = !isFreePackage;
+				}
+			}
+		} catch (error) {
+			window.log("error", "Purchase error");
+			window.log("error", error);
+		}
+	})();
 
 	try {
 		window.ANDROID_SDK_INT = await new Promise((resolve, reject) =>
