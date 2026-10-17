@@ -67,6 +67,12 @@ For comprehensive documentation on creating plugins for Acode Editor, visit the 
 
 For plugin development information, refer to: [Acode Plugin Documentation](https://docs.acode.app/)
 
+## • AI Agent and Models
+
+For the Acode AI Agent + OmniRoute setup, local models, and free-tier limitations, see [AI Agent Setup](docs/AI_AGENT_SETUP.md).
+
+This repository also includes curated [Agent Skills](.github/skills/) for common Acode development tasks. Review each skill before using it with a coding agent.
+
 ## Star History
 
 <a href="https://star-history.com/#Acode-Foundation/Acode&Date">

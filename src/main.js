@@ -179,7 +179,11 @@ async function onDeviceReady() {
 		);
 	});
 
+	const startupTime = performance.now();
 	let installSource = INSTALL_SOURCE_PLAY;
+	const sdkVersionPromise = new Promise((resolve, reject) =>
+		system.getAndroidVersion(resolve, reject),
+	);
 
 	try {
 		installSource = await helpers.promisify(system.getInstaller);
@@ -198,36 +202,37 @@ async function onDeviceReady() {
 		enumerable: false,
 	});
 
-	try {
-		await helpers.promisify(iap.startConnection).catch((e) => {
-			window.log("error", "connection error");
-			window.log("error", e);
-		});
-
-		if (localStorage.acode_pro === "true") {
-			config.HAS_PRO = true;
-		}
-
-		if (navigator.onLine) {
-			const purchases = await helpers.promisify(iap.getPurchases);
-			const isPro = purchases.find((p) =>
-				p.productIds.includes("acode_pro_new"),
-			);
-			if (isPro) {
-				config.HAS_PRO = true;
-			} else {
-				config.HAS_PRO = !isFreePackage;
-			}
-		}
-	} catch (error) {
-		window.log("error", "Purchase error");
-		window.log("error", error);
+	if (localStorage.acode_pro === "true") {
+		config.HAS_PRO = true;
 	}
 
+	// Verify purchases in the background so startup is not blocked by the network
+	(async () => {
+		try {
+			await helpers.promisify(iap.startConnection).catch((e) => {
+				window.log("error", "connection error");
+				window.log("error", e);
+			});
+
+			if (navigator.onLine) {
+				const purchases = await helpers.promisify(iap.getPurchases);
+				const isPro = purchases.find((p) =>
+					p.productIds.includes("acode_pro_new"),
+				);
+				if (isPro) {
+					config.HAS_PRO = true;
+				} else {
+					config.HAS_PRO = !isFreePackage;
+				}
+			}
+		} catch (error) {
+			window.log("error", "Purchase error");
+			window.log("error", error);
+		}
+	})();
+
 	try {
-		window.ANDROID_SDK_INT = await new Promise((resolve, reject) =>
-			system.getAndroidVersion(resolve, reject),
-		);
+		window.ANDROID_SDK_INT = await sdkVersionPromise;
 	} catch (error) {
 		window.ANDROID_SDK_INT = Number.parseInt(device.version);
 	}
@@ -249,7 +254,10 @@ async function onDeviceReady() {
 		return true;
 	})();
 	window.acode = acode;
-	await adRewards.init();
+	adRewards.init().catch((error) => {
+		window.log("error", "Ad rewards init failed");
+		window.log("error", error);
+	});
 	ensureAceCompatApi();
 
 	if (Number.isInteger(window.ANDROID_SDK_INT) && window.ANDROID_SDK_INT < 33) {
@@ -257,6 +265,10 @@ async function onDeviceReady() {
 		await ensurePermission("android.permission.WRITE_EXTERNAL_STORAGE");
 	}
 	await ensurePermission("android.permission.POST_NOTIFICATIONS");
+
+	console.debug(
+		`Startup: pre-app init took ${Math.round(performance.now() - startupTime)}ms`,
+	);
 
 	const { versionCode } = BuildInfo;
 
