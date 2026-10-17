@@ -1,0 +1,8 @@
+{
+  "id": "spotify",
+  "name": "Spotify",
+  "version": "1.0.0",
+  "main": "main.js",
+  "author": "Acode",
+  "description": "Open Spotify or play Spotify links in an embedded player."
+}
