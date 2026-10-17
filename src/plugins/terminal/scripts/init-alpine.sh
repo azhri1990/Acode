@@ -33,7 +33,7 @@ if [ "$INSTALLING" != true ] && [ $# -gt 0 ] && [ "${1#--}" = "$1" ]; then
     exec "$@"
 fi
 
-required_packages="bash command-not-found tzdata wget"
+required_packages="bash command-not-found tmux tzdata wget"
 missing_packages=""
 
 for pkg in $required_packages; do
