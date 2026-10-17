@@ -20,6 +20,7 @@ describe("summarizeProjectFiles", () => {
 		expect(summary.total).toBe(5);
 		expect(summary.extensions).toEqual([
 			{ extension: "js", count: 2 },
+			{ extension: "json", count: 1 },
 			{ extension: "md", count: 1 },
 		]);
 		expect(summary.keyFiles.map(({ name }) => name)).toEqual([
