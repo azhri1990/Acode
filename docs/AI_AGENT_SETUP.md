@@ -63,3 +63,45 @@ Local inference avoids hosted-provider token quotas, but available model size, s
 The [`.github/skills/`](../.github/skills/) directory contains a small set of repository-specific Agent Skills for Acode development, validation, Cordova plugin review, and AI provider integration. They are instructions, not a way to grant unlimited model usage.
 
 For more task-specific skills and agent profiles, browse [GitHub's Awesome Copilot collection](https://github.com/github/awesome-copilot) and the [Agent Skills open standard](https://github.com/agentskills/agentskills). Install only the skills and agents you need, review their instructions and any scripts before use, and limit tool permissions for agents that can edit files or run commands.
+
+## Optional: OpenSpec in Acode Terminal
+
+[OpenSpec](https://github.com/Fission-AI/OpenSpec) is a separate CLI for keeping project requirements and proposed changes in Markdown. It can complement the AI Agent for planning larger changes, but it is not an Acode plugin and does not add slash commands to Acode's AI Agent.
+
+OpenSpec requires Node.js 20.19.0 or later. To try it in a Terminal-backed project:
+
+1. Open the project folder in Acode and open **Terminal**. The AI Agent's shell tool is available only for Terminal-backed folders.
+2. Check the runtime:
+
+   ```sh
+   node --version
+   npm --version
+   ```
+
+3. If Node.js or npm is missing, install them in Acode's Alpine terminal environment, then check the Node version again:
+
+   ```sh
+   apk update
+   apk add nodejs npm
+   node --version
+   ```
+
+   Continue only if Node.js is at least `v20.19.0`. If the available Alpine package is older, stop and use a separate supported machine/runtime rather than switching runtimes or changing the app environment.
+4. Install OpenSpec in that terminal environment and verify it:
+
+   ```sh
+   npm install -g @fission-ai/openspec@latest
+   openspec --version
+   ```
+
+   If `openspec` is not found, check `npm config get prefix` and `npm bin -g` (if supported by your npm version); do not edit shell startup files automatically.
+5. In the terminal, confirm you are at the intended project root, then initialize OpenSpec without generating another assistant's integration files:
+
+   ```sh
+   openspec init --tools none
+   ```
+
+   This creates or updates OpenSpec project files. Review the changes before keeping or committing them. OpenSpec can also generate files for supported assistants, but those integrations are not evidence of native support in Acode's AI Agent.
+6. In the Acode AI Agent chat, explicitly ask it to read the project's `openspec/` Markdown and use it as planning context. The agent must still ask for approval before edits or commands; verify its proposed plan against the files.
+
+The global CLI installation is in the Acode Terminal's Alpine environment, not a Cordova plugin or Android-wide installation. OpenSpec's package and generated project files are maintained by its authors; see its [official installation guide](https://github.com/Fission-AI/OpenSpec/blob/main/docs/installation.md) for current requirements, installation, update, and removal instructions. Avoid initializing a project with an assistant ID unless that assistant is actually installed and supported in your workflow.
