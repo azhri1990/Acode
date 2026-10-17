@@ -1,8 +1,8 @@
 import "./style.scss";
 import fileIndex from "lib/fileIndex";
 import files from "lib/fileList";
-import { addedFolder } from "lib/openFolder";
 import openFile from "lib/openFile";
+import { addedFolder } from "lib/openFolder";
 import { summarizeProjectFiles } from "./summary";
 
 const MAX_INDEXED_FILES = 5000;

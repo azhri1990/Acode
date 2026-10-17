@@ -35,7 +35,9 @@ export function summarizeProjectFiles(entries = [], keyFileNames = new Set()) {
 		truncated: !!entries.truncated,
 		extensions: [...extensions]
 			.map(([extension, count]) => ({ extension, count }))
-			.sort((a, b) => b.count - a.count || a.extension.localeCompare(b.extension))
+			.sort(
+				(a, b) => b.count - a.count || a.extension.localeCompare(b.extension),
+			)
 			.slice(0, 5),
 		keyFiles: KEY_FILE_ORDER.filter((name) => keyFiles.has(name)).map((name) =>
 			keyFiles.get(name),

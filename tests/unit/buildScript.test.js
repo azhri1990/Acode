@@ -1,8 +1,8 @@
 import { spawnSync } from "node:child_process";
 import {
 	chmodSync,
-	mkdtempSync,
 	mkdirSync,
+	mkdtempSync,
 	readFileSync,
 	rmSync,
 	writeFileSync,
@@ -26,8 +26,7 @@ function runBuild(overrides = {}) {
 	const commands = {
 		npm: 'printf "%s\\n" "$PWD"',
 		node: 'printf "node\\n" >> "$BUILD_LOG"\nexit "${CONFIG_STATUS:-0}"',
-		rspack:
-			'printf "rspack\\n" >> "$BUILD_LOG"\nexit "${RSPACK_STATUS:-0}"',
+		rspack: 'printf "rspack\\n" >> "$BUILD_LOG"\nexit "${RSPACK_STATUS:-0}"',
 		cordova: 'printf "cordova\\n" >> "$BUILD_LOG"',
 	};
 
