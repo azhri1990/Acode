@@ -484,11 +484,26 @@ class TerminalManager {
 		}
 	}
 
+	formatInstallEntry(entry) {
+		if (typeof Terminal?.formatError === "function") {
+			return Terminal.formatError(entry);
+		}
+		if (entry instanceof Error) return entry.message || String(entry);
+		if (typeof entry === "object") {
+			try {
+				return JSON.stringify(entry);
+			} catch (error) {
+				return String(entry);
+			}
+		}
+		return String(entry);
+	}
+
 	formatInstallLog(value) {
 		const values = Array.isArray(value) ? value : [value];
 		const message = values
 			.filter((entry) => entry != null)
-			.map((entry) => Terminal.formatError(entry))
+			.map((entry) => this.formatInstallEntry(entry))
 			.filter(Boolean)
 			.join(" ");
 
