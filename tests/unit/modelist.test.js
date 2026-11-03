@@ -206,6 +206,25 @@ describe("getModeForPath", () => {
 		);
 	});
 
+	it("keeps case-sensitive filename matchers case-sensitive", () => {
+		registerTestMode("acode-case-sensitive", "", {
+			filenameMatchers: [/^Acodesensitive$/],
+		});
+
+		expect(getModeForPath("Acodesensitive").name).toBe("acode-case-sensitive");
+		expect(getModeForPath("acodesensitive").name).toBe("text");
+		expect(getModeForPath("ACODESENSITIVE").name).toBe("text");
+	});
+
+	it("keeps case-insensitive filename matchers case-insensitive", () => {
+		registerTestMode("acode-case-insensitive", "", {
+			filenameMatchers: [/^Acodematcher$/i],
+		});
+
+		expect(getModeForPath("acodematcher").name).toBe("acode-case-insensitive");
+		expect(getModeForPath("ACODEMATCHER").name).toBe("acode-case-insensitive");
+	});
+
 	it("keeps higher-specificity filename regexes ahead of exact names", () => {
 		registerTestMode("acode-exact-foo", "^acodepluginfile");
 		registerTestMode("acode-regex-foo", "", {

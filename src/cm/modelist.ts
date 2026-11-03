@@ -167,6 +167,11 @@ function getModeSpecificityScore(modeInstance: Mode): number {
 }
 
 function exactNameFromRegex(matcher: RegExp): string | null {
+	// Exact names are compared against the lower-cased file name, so only
+	// case-insensitive matchers can be reduced to a name lookup. A case-
+	// sensitive matcher (e.g. plugin `/^Makefile$/`) must keep using the
+	// original regex or it would start matching `makefile` too.
+	if (!matcher.flags.includes("i")) return null;
 	const otherFlags = matcher.flags.replaceAll("i", "");
 	if (otherFlags) return null;
 
