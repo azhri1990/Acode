@@ -1092,7 +1092,10 @@ class WorkspaceIndex {
       matches.put(match);
       matchCount++;
       if (matchCount == MAX_MATCHES_PER_FILE) {
-        sendSearchMatches(callback, job.id, file, matches, batchResults, matcher.find());
+        // Send before doing any more regex work. Calling matcher.find() as an
+        // argument used to run it first, so a cancellation or deadline there
+        // discarded the final batch of results.
+        sendSearchMatches(callback, job.id, file, matches, batchResults, true);
         return;
       }
       if (matches.length() >= SEARCH_RESULT_BATCH_MATCHES) {
@@ -1588,8 +1591,37 @@ class WorkspaceIndex {
       if ((accesses++ & 1023) == 0) check();
       return content.charAt(index);
     }
-    public CharSequence subSequence(int start, int end) { return content.subSequence(start, end); }
+    public CharSequence subSequence(int start, int end) {
+      // Return a view rather than the underlying String so reads made through
+      // a subsequence still observe cancellation and the deadline.
+      return new SearchSlice(this, start, end);
+    }
     public String toString() { return content; }
+
+    static final class SearchSlice implements CharSequence {
+      final SearchInput parent;
+      final int start;
+      final int end;
+
+      SearchSlice(SearchInput parent, int start, int end) {
+        if (start < 0 || end > parent.content.length() || start > end) {
+          throw new IndexOutOfBoundsException();
+        }
+        this.parent = parent;
+        this.start = start;
+        this.end = end;
+      }
+
+      public int length() { return end - start; }
+      public char charAt(int index) {
+        if (index < 0 || index >= length()) throw new IndexOutOfBoundsException();
+        return parent.charAt(start + index);
+      }
+      public CharSequence subSequence(int from, int to) {
+        return new SearchSlice(parent, start + from, start + to);
+      }
+      public String toString() { return parent.content.substring(start, end); }
+    }
   }
 
   private String[] getSurrounding(String content, String word, int start, int end) {
