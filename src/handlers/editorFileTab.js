@@ -252,7 +252,9 @@ function releaseDrag(e) {
 	if (openContextMenu) {
 		const file = draggedFile;
 		finishDrag(false);
-		openTabContextMenu(file);
+		// A touch release may be followed by a synthetic click. Defer the menu
+		// until that click has been dispatched so it cannot activate an item.
+		openTabContextMenu(file, { defer: e.type === "touchend" });
 		return;
 	}
 

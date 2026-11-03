@@ -27,10 +27,19 @@ const DRAG_MENU_SLOP = 8;
  *  - close-tabs-to-right close tabs right of the pressed tab
  *
  * @param {object} file The `EditorFile` whose tab was long pressed / right clicked
+ * @param {object} [options]
+ * @param {boolean} [options.defer] Open on the next task instead of synchronously.
+ *   Used when the gesture ends with `touchend`: the synthetic click that some
+ *   WebViews dispatch right after `touchend` must not land on the new menu.
  * @returns {HTMLElement|undefined} The context menu element, if it was shown.
  */
-export default function openTabContextMenu(file) {
+export default function openTabContextMenu(file, options = {}) {
 	if (!file || !file.tab || !file.tab.isConnected) return;
+
+	if (options.defer) {
+		setTimeout(() => openTabContextMenu(file), 0);
+		return;
+	}
 
 	const menu = Contextmenu({
 		...positionMenu(file.tab),
@@ -121,7 +130,7 @@ export function openTabContextMenuOnRelease(file, event) {
 		if (opened || cancelled) return;
 		opened = true;
 		cleanup();
-		openTabContextMenu(file);
+		openTabContextMenu(file, { defer: true });
 	};
 
 	const onPointerMove = (moveEvent) => {
