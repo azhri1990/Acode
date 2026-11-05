@@ -54,29 +54,35 @@ const MIME = {
 };
 
 function getLocalIP() {
-	const interfaces = os.networkInterfaces();
-	for (const iface of Object.values(interfaces)) {
-		if (!iface) continue;
-		for (const addr of iface) {
-			if (addr.family === "IPv4" && !addr.internal) {
-				// Prefer 192.168.x.x or 10.x.x.x over other private ranges
-				if (
-					addr.address.startsWith("192.168.") ||
-					addr.address.startsWith("10.")
-				) {
+	try {
+		const interfaces = os.networkInterfaces();
+		for (const iface of Object.values(interfaces)) {
+			if (!iface) continue;
+			for (const addr of iface) {
+				if (addr.family === "IPv4" && !addr.internal) {
+					// Prefer 192.168.x.x or 10.x.x.x over other private ranges
+					if (
+						addr.address.startsWith("192.168.") ||
+						addr.address.startsWith("10.")
+					) {
+						return addr.address;
+					}
+				}
+			}
+		}
+		// Fallback: any non-internal IPv4
+		for (const iface of Object.values(interfaces)) {
+			if (!iface) continue;
+			for (const addr of iface) {
+				if (addr.family === "IPv4" && !addr.internal) {
 					return addr.address;
 				}
 			}
 		}
-	}
-	// Fallback: any non-internal IPv4
-	for (const iface of Object.values(interfaces)) {
-		if (!iface) continue;
-		for (const addr of iface) {
-			if (addr.family === "IPv4" && !addr.internal) {
-				return addr.address;
-			}
-		}
+	} catch (err) {
+		// Network interface access failed (e.g., permission issues)
+		// Use fallback IP
+		return "127.0.0.1";
 	}
 	return "127.0.0.1";
 }
