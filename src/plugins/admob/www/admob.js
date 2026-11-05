@@ -154,8 +154,8 @@ class MobileAd {
         return this._destroyPromise;
     }
     init() {
+        var _a;
         return __awaiter(this, void 0, void 0, function* () {
-            var _a;
             if (this._destroyed)
                 throw new Error("Ad is destroyed");
             // biome-ignore lint/suspicious/noAssignInExpressions: <explanation>
@@ -165,8 +165,8 @@ class MobileAd {
         });
     }
     _init() {
+        var _a;
         return __awaiter(this, void 0, void 0, function* () {
-            var _a;
             yield admob.start();
             if (this._destroyed)
                 return;
