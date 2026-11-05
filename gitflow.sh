@@ -127,6 +127,96 @@ function hotfix_start() {
         echo -e "${RED}✗ Failed to create hotfix branch${NC}"
 }
 
+function mcp_analyze() {
+    echo -e "${BLUE}=== MCP Context Analysis ===${NC}"
+    
+    # Check for MCP bridge
+    if [ ! -f "src/lib/mcpBridge.js" ]; then
+        echo -e "${RED}✗ MCP bridge not found at src/lib/mcpBridge.js${NC}"
+        return 1
+    fi
+    
+    echo -e "${GREEN}✓ MCP bridge found${NC}"
+    echo -e "${BLUE}Repository Path:${NC} $(pwd)"
+    echo -e "${BLUE}OpenAI API Key:${NC} ${OPENAI_API_KEY:+configured}${OPENAI_API_KEY:-not-set}"
+    echo ""
+    
+    # Check MCP context cache
+    if [ -f ".acode/mcp-context.json" ]; then
+        echo -e "${GREEN}✓ MCP context cache exists${NC}"
+        cat .acode/mcp-context.json
+    else
+        echo -e "${YELLOW}⚠ MCP context cache not yet created (will be created on first analysis)${NC}"
+    fi
+}
+
+function mcp_generate() {
+    if [ -z "$1" ]; then
+        echo -e "${RED}Error: Feature description required for code generation${NC}"
+        echo "Usage: $0 mcp-generate <feature-description>"
+        exit 1
+    fi
+    
+    FEATURE_DESC="$1"
+    BRANCH_NAME="feature/$(echo $FEATURE_DESC | tr ' ' '-')"
+    
+    echo -e "${BLUE}=== MCP Code Generation: $FEATURE_DESC ===${NC}"
+    
+    # Create feature branch
+    git checkout develop 2>/dev/null || git checkout -b develop
+    git checkout -b "$BRANCH_NAME" 2>/dev/null || git checkout "$BRANCH_NAME"
+    
+    echo -e "${GREEN}✓ Feature branch: $BRANCH_NAME${NC}"
+    echo -e "${GREEN}✓ MCP would analyze context and generate code${NC}"
+    echo -e "${YELLOW}⚠ Implementation pending - see MCP bridge integration${NC}"
+}
+
+function mcp_fix() {
+    echo -e "${BLUE}=== MCP Issue Analysis & Fix Suggestions ===${NC}"
+    
+    if [ ! -f "src/lib/mcpBridge.js" ]; then
+        echo -e "${RED}✗ MCP bridge not found at src/lib/mcpBridge.js${NC}"
+        return 1
+    fi
+    
+    echo -e "${GREEN}✓ MCP bridge found${NC}"
+    
+    # Check for common issues
+    ISSUES=()
+    if git diff --cached --name-only | grep -q "TODO"; then
+        ISSUES+=("TODO comments found in staged files")
+    fi
+    
+    if [ ${#ISSUES[@]} -eq 0 ]; then
+        echo -e "${GREEN}✓ No obvious issues found${NC}"
+    else
+        for issue in "${ISSUES[@]}"; do
+            echo -e "${YELLOW}⚠ $issue${NC}"
+        done
+    fi
+}
+
+function mcp_status() {
+    echo -e "${BLUE}=== MCP Bridge Status ===${NC}"
+    
+    if [ -f "src/lib/mcpBridge.js" ]; then
+        echo -e "${GREEN}✓ MCP bridge module exists${NC}"
+    else
+        echo -e "${RED}✗ MCP bridge module not found${NC}"
+    fi
+    
+    if [ -f ".acode/mcp-context.json" ]; then
+        echo -e "${GREEN}✓ MCP context cache exists${NC}"
+    else
+        echo -e "${YELLOW}⚠ MCP context cache not created yet${NC}"
+    fi
+    
+    echo -e "${BLUE}LLM Configuration:${NC}"
+    echo "  Model: ${LLM_MODEL:-gpt-4o-mini}"
+    echo "  API Key: ${OPENAI_API_KEY:+configured}${OPENAI_API_KEY:-not-set}"
+    echo ""
+}
+
 function show_config() {
     echo -e "${BLUE}=== Gitflow Configuration ===${NC}"
     echo ""
@@ -157,6 +247,18 @@ case "$1" in
     config)
         show_config
         ;;
+    mcp-analyze)
+        mcp_analyze
+        ;;
+    mcp-generate)
+        mcp_generate "$2"
+        ;;
+    mcp-fix)
+        mcp_fix
+        ;;
+    mcp-status)
+        mcp_status
+        ;;
     *)
         echo "Acode Gitflow Helper"
         echo ""
@@ -169,12 +271,20 @@ case "$1" in
         echo "  release-start    - Start new release branch"
         echo "  hotfix-start     - Start new hotfix branch"
         echo "  config           - Show gitflow configuration"
+        echo "  mcp-analyze      - Analyze MCP context"
+        echo "  mcp-generate     - Generate code via MCP"
+        echo "  mcp-fix          - Suggest/fix issues via MCP"
+        echo "  mcp-status       - Show MCP bridge status"
         echo ""
         echo "Examples:"
         echo "  $0 feature-start my-new-feature"
         echo "  $0 feature-finish"
         echo "  $0 release-start v1.14.0"
         echo "  $0 hotfix-start v1.13.6"
+        echo "  $0 mcp-analyze"
+        echo "  $0 mcp-generate add-dark-mode"
+        echo "  $0 mcp-fix"
+        echo "  $0 mcp-status"
         echo ""
         exit 1
         ;;

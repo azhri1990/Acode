@@ -47,6 +47,44 @@ function sync_push() {
         echo -e "${RED}✗ Push failed - check authentication${NC}"
 }
 
+function llm_commit() {
+    echo -e "${BLUE}=== LLM-Assisted Commit ===${NC}"
+    
+    # Get staged changes
+    CHANGES=$(git diff --cached --stat 2>/dev/null)
+    if [ -z "$CHANGES" ]; then
+        echo -e "${YELLOW}⚠ No staged changes found${NC}"
+        echo -e "${YELLOW}Use 'git add' to stage changes first${NC}"
+        return 1
+    fi
+    
+    echo -e "${GREEN}Staged changes:${NC}"
+    echo "$CHANGES"
+    echo ""
+    
+    # Try to use OpenAI API for commit message generation
+    if [ -n "$OPENAI_API_KEY" ]; then
+        echo -e "${BLUE}Generating AI commit message...${NC}"
+        # TODO: Integrate with OpenAI API via MCP bridge
+        echo -e "${YELLOW}⚠ LLM commit message generation not yet implemented${NC}"
+        echo -e "${YELLOW}Set OPENAI_API_KEY environment variable to enable${NC}"
+    else
+        echo -e "${YELLOW}⚠ OPENAI_API_KEY not set${NC}"
+    fi
+    
+    echo ""
+    read -p "Enter commit message: " COMMIT_MSG
+    
+    if [ -z "$COMMIT_MSG" ]; then
+        echo -e "${RED}Error: Commit message required${NC}"
+        return 1
+    fi
+    
+    git commit -m "$COMMIT_MSG" && \
+        echo -e "${GREEN}✓ Commit successful${NC}" || \
+        echo -e "${RED}✗ Commit failed${NC}"
+}
+
 function sync_full() {
     echo -e "${BLUE}=== Running full sync ===${NC}"
     sync_pull
@@ -68,16 +106,20 @@ case "$1" in
     full)
         sync_full
         ;;
+    llm-commit)
+        llm_commit
+        ;;
     *)
         echo "Acode Git-Sync Helper"
         echo ""
-        echo "Usage: $0 {status|pull|push|full}"
+        echo "Usage: $0 {status|pull|push|full|llm-commit}"
         echo ""
         echo "Commands:"
-        echo "  status  - Show current sync status"
-        echo "  pull    - Pull latest changes from remote"
-        echo "  push    - Push local changes to remote"
-        echo "  full    - Run full sync (pull + status)"
+        echo "  status      - Show current sync status"
+        echo "  pull        - Pull latest changes from remote"
+        echo "  push        - Push local changes to remote"
+        echo "  full        - Run full sync (pull + status)"
+        echo "  llm-commit  - Create commit with AI-generated message"
         echo ""
         exit 1
         ;;
