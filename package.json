@@ -32,9 +32,7 @@
       "cordova-clipboard": {},
       "cordova-plugin-device": {},
       "cordova-plugin-file": {},
-      "cordova-plugin-server": {},
       "cordova-plugin-ftp": {},
-      "cordova-plugin-sdcard": {},
       "cordova-plugin-websocket": {},
       "cordova-plugin-buildinfo": {},
       "cordova-plugin-browser": {},
@@ -43,13 +41,15 @@
       "com.foxdebug.acode.rk.plugin.plugincontext": {},
       "com.foxdebug.acode.rk.auth": {},
       "com.foxdebug.acode.rk.exec.proot": {},
-      "cordova-plugin-iap": {},
       "com.foxdebug.acode.rk.customtabs": {},
       "cordova-plugin-crashhandler": {},
       "cordova-plugin-advanced-http": {
         "ANDROIDBLACKLISTSECURESOCKETPROTOCOLS": "SSLv3,TLSv1"
       },
       "cordova-plugin-acode-webview": {},
+      "cordova-plugin-iap": {},
+      "cordova-plugin-sdcard": {},
+      "cordova-plugin-server": {},
       "cordova-plugin-system": {}
     },
     "platforms": [
