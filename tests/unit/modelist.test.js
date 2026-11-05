@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import "cm/supportedModes";
 import {
 	addMode,
+	getFormatAsMode,
 	getModeForPath,
 	getModes,
 	removeMode,
@@ -122,9 +123,7 @@ function collectParityPaths() {
 				source.endsWith("$") &&
 				!/[|()[*+?]/.test(source.slice(1, -1).replace(/\\./g, ""))
 			) {
-				const name = source
-					.slice(1, -1)
-					.replace(/\\(.)/g, "$1");
+				const name = source.slice(1, -1).replace(/\\(.)/g, "$1");
 				if (name) paths.add(name);
 			}
 		}
@@ -147,6 +146,30 @@ function registerTestMode(name, extensions, options) {
 }
 
 describe("getModeForPath", () => {
+	it("loads Markdown with extended GFM syntax", async () => {
+		const markdownMode = getModeForPath("README.md");
+		const loadMarkdown = markdownMode.getExtension();
+		expect(loadMarkdown).toEqual(expect.any(Function));
+
+		const support = await loadMarkdown();
+		const tree = support.language.parser.parse(
+			[
+				"~~Strikethrough~~",
+				"",
+				"- [x] Completed task",
+				"",
+				"| Column 1 | Column 2 |",
+				"|----------|----------|",
+				"| A        | B        |",
+			].join("\n"),
+		);
+		const syntax = tree.toString();
+
+		expect(syntax).toContain("Strikethrough");
+		expect(syntax).toContain("TaskMarker");
+		expect(syntax).toContain("Table");
+	});
+
 	it("matches the previous sort-and-scan result for built-in modes", () => {
 		const paths = collectParityPaths();
 		expect(paths.length).toBeGreaterThan(100);
@@ -235,6 +258,43 @@ describe("getModeForPath", () => {
 			legacyGetModeForPath("acodepluginfile").name,
 		);
 		expect(getModeForPath("acodepluginfile").name).toBe("acode-regex-foo");
+	});
+
+	it("stores the normalized formatAs mode", () => {
+		registerTestMode("acode-json-like", "acodejsonlike", {
+			formatAs: " JSON ",
+		});
+		registerTestMode("acode-plain", "acodeplain");
+
+		expect(getModeForPath("a.acodejsonlike").formatAs).toBe("json");
+		expect(getModeForPath("a.acodeplain").formatAs).toBeNull();
+	});
+
+	it("resolves formatAs aliases to the base mode name", () => {
+		registerTestMode("acode-json5-like", "acodejson5like", {
+			formatAs: "json5",
+		});
+		registerTestMode("acode-unknown-base", "acodeunknownbase", {
+			formatAs: "acode-missing",
+		});
+
+		expect(getFormatAsMode("acode-json5-like")).toBe("json");
+		expect(getFormatAsMode("acode-unknown-base")).toBe("acode-missing");
+		expect(getFormatAsMode("json")).toBeNull();
+	});
+
+	it("ignores malformed mode options from plugins", () => {
+		expect(() =>
+			registerTestMode("acode-null-options", "acodenullopts", null),
+		).not.toThrow();
+		registerTestMode("acode-bad-options", "acodebadopts", {
+			aliases: "abc",
+			formatAs: 42,
+		});
+
+		const mode = getModeForPath("a.acodebadopts");
+		expect(mode.aliases).toEqual([]);
+		expect(mode.formatAs).toBeNull();
 	});
 
 	it("invalidates plugin registrations immediately", () => {

@@ -30,7 +30,9 @@ describe("SFTP secure profiles", () => {
 		const url = createSftpProfileUrl("profile-123", "/project/file.js");
 		expect(url).toBe("sftp://profile-123/project/file.js");
 		expect(getSftpProfileId(url)).toBe("profile-123");
-		expect(getSftpProfileId("sftp://user:secret@example.com/project")).toBeNull();
+		expect(
+			getSftpProfileId("sftp://user:secret@example.com/project"),
+		).toBeNull();
 		expect(
 			getSftpProfileId("sftp://user:secret@profile-server/project"),
 		).toBeNull();
@@ -149,8 +151,7 @@ describe("SFTP secure profiles", () => {
 		const saveProfile = vi.fn((...args) => args.at(-2)("profile-folder"));
 		globalThis.sftp = { saveProfile };
 		const root = "sftp://user:secret@example.com/project";
-		const expandedFolder =
-			"sftp://user:stale-secret@example.com/project/src";
+		const expandedFolder = "sftp://user:stale-secret@example.com/project/src";
 		localStorage.setItem(
 			"folders",
 			JSON.stringify([
@@ -257,23 +258,40 @@ describe("SFTP secure profiles", () => {
 	});
 
 	it("scrubs malformed legacy SFTP values instead of marking them migrated", async () => {
-		globalThis.sftp = { saveProfile: vi.fn() };
-		localStorage.setItem(
-			"recentFiles",
-			JSON.stringify([
-				"sftp:///missing-host",
-				"sftp://user:%E0%A4%A@example.com/bad-encoding",
-			]),
-		);
+		const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+		try {
+			globalThis.sftp = { saveProfile: vi.fn() };
+			localStorage.setItem(
+				"recentFiles",
+				JSON.stringify([
+					"sftp:///missing-host",
+					"sftp://user:%E0%A4%A@example.com/bad-encoding",
+				]),
+			);
 
-		const result = await migrateLegacySftpProfiles();
+			const result = await migrateLegacySftpProfiles();
 
-		expect(JSON.parse(localStorage.getItem("recentFiles"))).toEqual([]);
-		expect(result.failures[0].message).toBe(
-			"The saved SFTP address is incomplete",
-		);
-		expect(result.failures[1].message).toBe("URI malformed");
-		expect(localStorage.getItem("sftpNativeProfileMigration")).toBe("2");
+			expect(JSON.parse(localStorage.getItem("recentFiles"))).toEqual([]);
+			expect(result.failures[0].message).toBe(
+				"The saved SFTP address is incomplete",
+			);
+			expect(result.failures[1].message).toBe("URI malformed");
+			expect(localStorage.getItem("sftpNativeProfileMigration")).toBe("2");
+			expect(warn).toHaveBeenNthCalledWith(
+				1,
+				"Could not migrate legacy SFTP URL",
+				expect.objectContaining({
+					message: "The saved SFTP address is incomplete",
+				}),
+			);
+			expect(warn).toHaveBeenNthCalledWith(
+				2,
+				"Could not migrate legacy SFTP URL",
+				expect.objectContaining({ message: "URI malformed" }),
+			);
+		} finally {
+			warn.mockRestore();
+		}
 	});
 
 	it("deletes an app-owned legacy key copy when its profile cannot migrate", async () => {
