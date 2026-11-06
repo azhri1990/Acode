@@ -1,5 +1,29 @@
 const Executor = require("./Executor");
 
+const MAX_DOWNLOAD_RETRIES = 3;
+const DOWNLOAD_RETRY_DELAY_MS = 1000;
+
+const downloadWithRetry = async (url, dest, label, retries = MAX_DOWNLOAD_RETRIES) => {
+    let lastError = "";
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            logger(`⬇️  ${label} (attempt ${attempt}/${retries})...`);
+            await downloadFile(url, dest, label);
+            logger(`✅  ${label} downloaded successfully`);
+            return true;
+        } catch (error) {
+            lastError = error.message;
+            logger(`⚠️  ${label} download failed (attempt ${attempt}/${retries}): ${error.message}`);
+            if (attempt < retries) {
+                logger(`⏳  Waiting ${DOWNLOAD_RETRY_DELAY_MS}ms before retry...`);
+                await new Promise(resolve => setTimeout(resolve, DOWNLOAD_RETRY_DELAY_MS));
+            }
+        }
+    }
+    logger(`❌  ${label} failed after ${retries} attempts: ${lastError}`);
+    return false;
+};
+
 const Terminal = {
     /**
      * Starts the AXS environment by writing init scripts and executing the sandbox.
@@ -8,7 +32,7 @@ const Terminal = {
      * @param {Function} [err_logger=console.error] - Function to log errors.
      * @returns {Promise<boolean>} - Returns true if installation completes with exit code 0, void if not installing
      */
-    async startAxs(installing = false, logger = console.log, err_logger = console.error,failsafe = false) {
+    async startAxs(installing = false, logger = console.log, err_logger = console.error, failsafe = false, distro = "alpine") {
         const filesDir = await new Promise((resolve, reject) => {
             system.getFilesDir(resolve, reject);
         });
@@ -16,7 +40,7 @@ const Terminal = {
         const failsafeArg = failsafe ? "--failsafe" : "";
 
         const [initAlpine, rmWrapper, initSandbox] = await Promise.all([
-            readAsset("init-alpine.sh"),
+            readAsset(`scripts/init-${distro}.sh`),
             readAsset("rm-wrapper.sh"),
             readAsset("init-sandbox.sh"),
         ]);
@@ -31,12 +55,12 @@ const Terminal = {
 }
         
 
-        await writeText(`${filesDir}/init-alpine.sh`, initAlpine);
+        await writeText(`${filesDir}/init-${distro}.sh`, initAlpine);
         await writeText(`${filesDir}/init-sandbox.sh`, initSandbox);
 
-        await deleteFile(`${filesDir}/alpine/bin/rm`).catch(() => {});
-        await writeText(`${filesDir}/alpine/bin/rm`, rmWrapper);
-        await setExec(`${filesDir}/alpine/bin/rm`, true);
+        await deleteFile(`${filesDir}/${distro}/bin/rm`).catch(() => {});
+        await writeText(`${filesDir}/${distro}/bin/rm`, rmWrapper);
+        await setExec(`${filesDir}/${distro}/bin/rm`, true);
 
         if (installing) {
             return new Promise((resolve, reject) => {
@@ -61,7 +85,7 @@ const Terminal = {
                         resolve(success);
                     }
                 }).then(async (uuid) => {
-                    await Executor.write(uuid, `source ${filesDir}/init-sandbox.sh ${installing ? "--installing" : ""} ${failsafeArg}; exit`);
+                    await Executor.write(uuid, `export DISTRO=${distro}; source ${filesDir}/init-sandbox.sh ${installing ? "--installing" : ""} ${failsafeArg}; exit`);
                 }).catch((error) => {
                     const message = `Failed to start AXS: ${formatError(error)}`;
                     this.lastInstallError = message;
@@ -75,7 +99,7 @@ const Terminal = {
                     //console[type === "stderr" ? "error" : "log"](`[AXS] ${data}`);
                     logger(`${type} ${data}`);
                 });
-                await Executor.write(uuid, `source ${filesDir}/init-sandbox.sh ${installing ? "--installing" : ""} ${failsafeArg}; exit`);
+                await Executor.write(uuid, `export DISTRO=${distro}; source ${filesDir}/init-sandbox.sh ${installing ? "--installing" : ""} ${failsafeArg}; exit`);
             } catch (error) {
                 const message = `Failed to start AXS: ${formatError(error)}`;
                 err_logger(message);
@@ -120,7 +144,7 @@ const Terminal = {
      * @param {Function} [err_logger=console.error] - Function to log errors.
      * @returns {Promise<boolean>} - Returns true if installation completes with exit code 0
      */
-    async install(logger = console.log, err_logger = console.error) {
+    async install(logger = console.log, err_logger = console.error, distro = "alpine") {
         if (!(await this.isSupported())) return false;
 
         const isFdroid = await Executor.execute("echo $FDROID");
@@ -144,12 +168,19 @@ const Terminal = {
 
         try {
 
+            const isAlpine = distro === "alpine";
+            const isDebian = distro === "debian";
+
             const architectures = {
                 "arm64-v8a": {
                     libraryDirectory: "arm64",
                     axsArchitecture: "arm64",
                     alpineDirectory: "aarch64",
                     alpineFilename: "alpine-minirootfs-3.21.0-aarch64.tar.gz",
+                    ubuntuDirectory: "arm64",
+                    ubuntuFilename: "ubuntu-base-24.04-base-arm64.tar.gz",
+                    debianDirectory: "arm64",
+                    debianFilename: "debian-12-base-arm64.tar.gz",
                     hasLibproot32: true
                 },
 
@@ -158,6 +189,10 @@ const Terminal = {
                     axsArchitecture: "armv7",
                     alpineDirectory: "armhf",
                     alpineFilename: "alpine-minirootfs-3.21.0-armhf.tar.gz",
+                    ubuntuDirectory: "armhf",
+                    ubuntuFilename: "ubuntu-base-24.04-base-armhf.tar.gz",
+                    debianDirectory: "armhf",
+                    debianFilename: "debian-12-base-armhf.tar.gz",
                     hasLibproot32: false
                 },
 
@@ -166,6 +201,10 @@ const Terminal = {
                     axsArchitecture: "x86_64",
                     alpineDirectory: "x86_64",
                     alpineFilename: "alpine-minirootfs-3.21.0-x86_64.tar.gz",
+                    ubuntuDirectory: "amd64",
+                    ubuntuFilename: "ubuntu-base-24.04-base-amd64.tar.gz",
+                    debianDirectory: "amd64",
+                    debianFilename: "debian-12-base-amd64.tar.gz",
                     hasLibproot32: true
                 }
             };
@@ -208,6 +247,14 @@ const Terminal = {
                     "linux",
                     ".",
                     "org"
+                ],
+
+                ubuntuDomain: [
+                    "cdimage",
+                    ".",
+                    "ubuntu",
+                    ".",
+                    "com"
                 ],
 
                 acodeFoundation: [
@@ -266,6 +313,12 @@ const Terminal = {
                 "/alpine/v3.21/releases/"
             );
 
+            const ubuntuBase = buildUrl(
+                ...strings.protocol,
+                ...strings.ubuntuDomain,
+                "/ubuntu-base/releases/"
+            );
+
             const libraryBaseUrl = buildUrl(
                 rawGithubBase,
                 architecture.libraryDirectory,
@@ -307,24 +360,62 @@ const Terminal = {
                 architecture.alpineFilename
             );
 
-                logger("⬇️  Downloading sandbox filesystem...");
-                await downloadFile(alpineUrl, cordova.file.dataDirectory + "alpine.tar.gz", "Sandbox filesystem");
+            const debianUrl = buildUrl(
+                ubuntuBase,
+                architecture.debianDirectory,
+                "/",
+                architecture.debianFilename
+            );
+
+            const ubuntuUrl = buildUrl(
+                ubuntuBase,
+                "24.04/release/",
+                architecture.ubuntuDirectory,
+                "/",
+                architecture.ubuntuFilename
+            );
+
+            const rootfsUrl = isAlpine ? alpineUrl : (isDebian ? debianUrl : ubuntuUrl);
+            const rootfsFilename = isAlpine ? "alpine.tar.gz" : (isDebian ? "debian.tar.gz" : "ubuntu.tar.gz");
+
+                logger(`⬇️  Downloading sandbox filesystem (${distro})...`);
+                const rootfsOk = await downloadWithRetry(rootfsUrl, cordova.file.dataDirectory + rootfsFilename, "Sandbox filesystem");
+                if (!rootfsOk) {
+                    throw new Error("Failed to download sandbox filesystem after retries");
+                }
 
                 logger("⬇️  Downloading axs...");
-                await downloadFile(axsUrl, cordova.file.dataDirectory + "axs", "AXS");
+                const axsOk = await downloadWithRetry(axsUrl, cordova.file.dataDirectory + "axs", "AXS");
+                if (!axsOk) {
+                    throw new Error("Failed to download AXS after retries");
+                }
 
                 logger("⬇️  Downloading compatibility layer...");
-                await downloadFile(prootUrl, cordova.file.dataDirectory + "libproot-xed.so", "Compatibility layer");
+                const prootOk = await downloadWithRetry(prootUrl, cordova.file.dataDirectory + "libproot-xed.so", "Compatibility layer");
+                if (!prootOk) {
+                    throw new Error("Failed to download compatibility layer after retries");
+                }
 
                 logger("⬇️  Downloading supporting library...");
-                await downloadFile(libTalloc, cordova.file.dataDirectory + "libtalloc.so.2", "Supporting library");
+                const tallocOk = await downloadWithRetry(libTalloc, cordova.file.dataDirectory + "libtalloc.so.2", "Supporting library");
+                if (!tallocOk) {
+                    throw new Error("Failed to download supporting library after retries");
+                }
 
                 if (libproot != null) {
-                    await downloadFile(libproot, cordova.file.dataDirectory + "libproot.so", "proot loader");
+                    logger("⬇️  Downloading proot loader...");
+                    const prootLoaderOk = await downloadWithRetry(libproot, cordova.file.dataDirectory + "libproot.so", "proot loader");
+                    if (!prootLoaderOk) {
+                        logger("⚠️  Proot loader download failed, continuing without 32-bit support");
+                    }
                 }
 
                 if (libproot32 != null) {
-                    await downloadFile(libproot32, cordova.file.dataDirectory + "libproot32.so", "32-bit proot loader");
+                    logger("⬇️  Downloading 32-bit proot loader...");
+                    const proot32Ok = await downloadWithRetry(libproot32, cordova.file.dataDirectory + "libproot32.so", "32-bit proot loader");
+                    if (!proot32Ok) {
+                        logger("⚠️  32-bit proot loader download failed, continuing without 32-bit support");
+                    }
                 }
 
                 logger("✅  All downloads completed");
@@ -349,27 +440,33 @@ const Terminal = {
 
             await ensureDir(`${filesDir}/.downloaded`);
 
-            const alpineDir = `${filesDir}/alpine`;
+            const distroDir = `${filesDir}/${distro}`;
 
-            await ensureDir(alpineDir);
+            await ensureDir(distroDir);
 
 
             logger("📦  Extracting sandbox filesystem...");
-            await Executor.execute(`tar --no-same-owner -xf ${filesDir}/alpine.tar.gz -C ${alpineDir}`);
+            await Executor.execute(`tar --no-same-owner -xf ${filesDir}/${rootfsFilename} -C ${distroDir}`);
 
             logger("⚙️  Applying basic configuration...");
-            await writeText(`${alpineDir}/etc/resolv.conf`, `nameserver 8.8.4.4 \nnameserver 8.8.8.8`);
+            await writeText(`${distroDir}/etc/resolv.conf`, `nameserver 8.8.4.4 \nnameserver 8.8.8.8`);
 
             const rmWrapper = await readAsset("rm-wrapper.sh");
-            await deleteFile(`${alpineDir}/bin/rm`).catch(() => {});
-            await writeText(`${alpineDir}/bin/rm`, rmWrapper);
-            await setExec(`${alpineDir}/bin/rm`, true);
+            await deleteFile(`${distroDir}/bin/rm`).catch(() => {});
+            await writeText(`${distroDir}/bin/rm`, rmWrapper);
+            await setExec(`${distroDir}/bin/rm`, true);
 
             logger("✅  Extraction complete");
             await ensureDir(`${filesDir}/.extracted`);
 
             logger("⚙️  Updating sandbox enviroment...");
-            const installResult = await this.startAxs(true, logger, err_logger);
+
+            const healthCheck = await this.verifyInstallation(distroDir);
+            if (!healthCheck.ok) {
+                throw new Error(`Rootfs health check failed: ${healthCheck.reason}`);
+            }
+
+            const installResult = await this.startAxs(true, logger, err_logger, false, distro);
             if (!installResult) {
                 throw new Error(this.lastInstallError || "Sandbox configuration failed.");
             }
@@ -394,32 +491,94 @@ const Terminal = {
                 system.getFilesDir(resolve, reject);
             });
 
-            const alpineExists = await new Promise((resolve, reject) => {
-                system.fileExists(`${filesDir}/alpine`, false, (result) => {
-                    resolve(result == 1);
-                }, reject);
+            const distroExists = await new Promise(async (resolve, reject) => {
+                const alpineExists = await new Promise((resolve, reject) => {
+                    system.fileExists(`${filesDir}/alpine`, false, (result) => {
+                        resolve(result == 1);
+                    }, reject);
+                });
+
+                const ubuntuExists = await new Promise((resolve, reject) => {
+                    system.fileExists(`${filesDir}/ubuntu`, false, (result) => {
+                        resolve(result == 1);
+                    }, reject);
+                });
+
+                const debianExists = await new Promise((resolve, reject) => {
+                    system.fileExists(`${filesDir}/debian`, false, (result) => {
+                        resolve(result == 1);
+                    }, reject);
+                });
+
+                resolve(alpineExists || ubuntuExists || debianExists);
             });
 
-            const downloaded = alpineExists && await new Promise((resolve, reject) => {
+            const downloaded = distroExists && await new Promise((resolve, reject) => {
                 system.fileExists(`${filesDir}/.downloaded`, false, (result) => {
                     resolve(result == 1);
                 }, reject);
             });
 
-            const extracted = alpineExists && await new Promise((resolve, reject) => {
+            const extracted = distroExists && await new Promise((resolve, reject) => {
                 system.fileExists(`${filesDir}/.extracted`, false, (result) => {
                     resolve(result == 1);
                 }, reject);
             });
 
-            const configured = alpineExists && await new Promise((resolve, reject) => {
+            const configured = distroExists && await new Promise((resolve, reject) => {
                 system.fileExists(`${filesDir}/.configured`, false, (result) => {
                     resolve(result == 1);
                 }, reject);
             });
 
-            resolve(alpineExists && downloaded && extracted && configured);
+            resolve(distroExists && downloaded && extracted && configured);
         });
+    },
+
+    async verifyInstallation(distroDir) {
+        const checks = [
+            {
+                name: "rootfs",
+                path: `${distroDir}/etc/os-release`,
+                successMessage: "Rootfs filesystem mounted",
+            },
+            {
+                name: "rm command",
+                path: `${distroDir}/bin/rm`,
+                successMessage: "rm command available",
+            },
+            {
+                name: "AXS binary",
+                path: `$PREFIX/axs`,
+                successMessage: "AXS binary available",
+            },
+        ];
+
+        const results = [];
+        for (const check of checks) {
+            try {
+                const exists = await new Promise((resolve) => {
+                    system.fileExists(check.path, false, (result) => {
+                        resolve(result == 1);
+                    }, () => resolve(false));
+                });
+                results.push({
+                    name: check.name,
+                    ok: exists,
+                    reason: exists ? check.successMessage : `Missing ${check.name}`,
+                });
+            } catch (error) {
+                results.push({
+                    name: check.name,
+                    ok: false,
+                    reason: `Error checking ${check.name}: ${error.message}`,
+                });
+            }
+        }
+
+        const ok = results.every((r) => r.ok);
+        const reason = ok ? "All checks passed" : `Failed checks: ${results.filter((r) => !r.ok).map((r) => r.name).join(", ")}`;
+        return { ok, reason, details: results };
     },
 
     /**
@@ -457,11 +616,11 @@ const Terminal = {
             }
             const cmd = `
             set -e
-            INCLUDE_FILES="alpine .downloaded .extracted .configured axs"
+            INCLUDE_FILES="alpine ubuntu debian .downloaded .extracted .configured axs"
             if [ "$FDROID" = "true" ]; then
                 INCLUDE_FILES="$INCLUDE_FILES libtalloc.so.2 libproot-xed.so"
             fi
-            EXCLUDE="--exclude=alpine/data --exclude=alpine/system --exclude=alpine/vendor --exclude=alpine/sdcard --exclude=alpine/storage --exclude=alpine/public --exclude=alpine/apex --exclude=alpine/odm --exclude=alpine/product --exclude=alpine/system_ext --exclude=alpine/linkerconfig --exclude=alpine/proc --exclude=alpine/sys --exclude=alpine/dev --exclude=alpine/run --exclude=alpine/tmp"
+            EXCLUDE="--exclude=alpine/data --exclude=alpine/system --exclude=alpine/vendor --exclude=alpine/sdcard --exclude=alpine/storage --exclude=alpine/public --exclude=alpine/apex --exclude=alpine/odm --exclude=alpine/product --exclude=alpine/system_ext --exclude=alpine/linkerconfig --exclude=alpine/proc --exclude=alpine/sys --exclude=alpine/dev --exclude=alpine/run --exclude=alpine/tmp --exclude=ubuntu/data --exclude=ubuntu/system --exclude=ubuntu/vendor --exclude=ubuntu/sdcard --exclude=ubuntu/storage --exclude=ubuntu/public --exclude=ubuntu/apex --exclude=ubuntu/odm --exclude=ubuntu/product --exclude=ubuntu/system_ext --exclude=ubuntu/linkerconfig --exclude=ubuntu/proc --exclude=ubuntu/sys --exclude=ubuntu/dev --exclude=ubuntu/run --exclude=ubuntu/tmp --exclude=debian/data --exclude=debian/system --exclude=debian/vendor --exclude=debian/sdcard --exclude=debian/storage --exclude=debian/public --exclude=debian/apex --exclude=debian/odm --exclude=debian/product --exclude=debian/system_ext --exclude=debian/linkerconfig --exclude=debian/proc --exclude=debian/sys --exclude=debian/dev --exclude=debian/run --exclude=debian/tmp"
             tar -cf "$PREFIX/aterm_backup.tar" -C "$PREFIX" $EXCLUDE $INCLUDE_FILES
             echo "ok"
             `;
@@ -500,7 +659,7 @@ const Terminal = {
             const cmd = `
             set -e
 
-            INCLUDE_FILES="$PREFIX/alpine $PREFIX/.downloaded $PREFIX/.extracted $PREFIX/.configured $PREFIX/axs"
+            INCLUDE_FILES="$PREFIX/alpine $PREFIX/ubuntu $PREFIX/debian $PREFIX/.downloaded $PREFIX/.extracted $PREFIX/.configured $PREFIX/axs"
 
             if [ "$FDROID" = "true" ]; then
                 INCLUDE_FILES="$INCLUDE_FILES $PREFIX/libtalloc.so.2 $PREFIX/libproot-xed.so"
@@ -548,7 +707,7 @@ const Terminal = {
             const cmd = `
             set -e
 
-            INCLUDE_FILES="$PREFIX/alpine $PREFIX/.downloaded $PREFIX/.extracted $PREFIX/.configured $PREFIX/axs"
+            INCLUDE_FILES="$PREFIX/alpine $PREFIX/ubuntu $PREFIX/debian $PREFIX/.downloaded $PREFIX/.extracted $PREFIX/.configured $PREFIX/axs"
 
             if [ "$FDROID" = "true" ]; then
                 INCLUDE_FILES="$INCLUDE_FILES $PREFIX/libtalloc.so.2 $PREFIX/libproot-xed.so"
@@ -565,6 +724,68 @@ const Terminal = {
                 resolve(result);
             } else {
                 reject(result);
+            }
+        });
+    },
+
+    /**
+     * Installs Myra Deep Research Assistant in the terminal environment.
+     * @param {Function} [logger=console.log] - Function to log standard output.
+     * @param {Function} [err_logger=console.error] - Function to log errors.
+     * @returns {Promise<string>} - Returns "ok" when installation completes
+     */
+    installMyra(logger = console.log, err_logger = console.error) {
+        return new Promise(async (resolve, reject) => {
+            const filesDir = await new Promise((resolve, reject) => {
+                system.getFilesDir(resolve, reject);
+            });
+
+            try {
+                logger("📦 Installing Myra Deep Research Assistant...");
+
+                // Check if Node.js is installed
+                const nodeCheck = await Executor.execute("which node || echo 'not-found'");
+                if (nodeCheck.includes("not-found")) {
+                    logger("📥 Node.js not found, attempting to install...");
+                    const isFdroid = await Executor.execute("echo $FDROID");
+                    if (isFdroid === "true") {
+                        await Executor.execute("apk add --no-cache nodejs npm");
+                    } else {
+                        await Executor.execute("apt-get update && apt-get install -y nodejs npm");
+                    }
+                }
+
+                // Verify Node.js
+                const nodeVersion = await Executor.execute("node --version");
+                logger(`✅ Node.js installed: ${nodeVersion}`);
+
+                // Create installation directory
+                await Executor.execute("mkdir -p /usr/local/lib/myra");
+
+                // Extract Myra bundle
+                const extractCmd = `tar -xzf ${filesDir}/assets/myra-bundle.tar.gz -C /usr/local/lib/myra`;
+                const extractResult = await Executor.execute(extractCmd);
+                logger("✅ Myra extracted");
+
+                // Install dependencies
+                await Executor.execute("cd /usr/local/lib/myra && npm install --production 2>/dev/null || true");
+
+                // Create wrapper script
+                const wrapperCmd = `cat > /usr/local/bin/myra << 'EOF'
+#!/bin/bash
+node /usr/local/lib/myra/cli/index.js "$@"
+EOF
+chmod +x /usr/local/bin/myra`;
+                await Executor.execute(wrapperCmd);
+
+                logger("✅ Myra installed successfully!");
+                logger("🚀 Run 'myra --help' to get started");
+
+                resolve("ok");
+            } catch (error) {
+                const message = formatError(error);
+                err_logger(`Myra installation failed: ${message}`);
+                reject(message);
             }
         });
     },

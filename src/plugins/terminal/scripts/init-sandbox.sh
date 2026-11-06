@@ -1,7 +1,8 @@
 export LD_LIBRARY_PATH=$PREFIX
+DISTRO=${DISTRO:-alpine}
 
 mkdir -p "$PREFIX/tmp"
-mkdir -p "$PREFIX/alpine/tmp"
+mkdir -p "$PREFIX/$DISTRO/tmp"
 mkdir -p "$PREFIX/public"
 
 export PROOT_TMP_DIR=$PREFIX/tmp
@@ -66,7 +67,7 @@ ARGS="$ARGS -b $NATIVE_DIR"
 ARGS="$ARGS -b $PREFIX/public:/public"
 ARGS="$ARGS -b $PREFIX/public:/home"
 ARGS="$ARGS -b $PREFIX/public:/root"
-ARGS="$ARGS -b $PREFIX/alpine/tmp:/dev/shm"
+ARGS="$ARGS -b $PREFIX/$DISTRO/tmp:/dev/shm"
 
 
 # PRoot canonicalizes every -b host path with realpath(3).  The magic links
@@ -118,7 +119,7 @@ if can_bind "/proc/$SELF_PID/fd/2"; then
 fi
 
 
-ARGS="$ARGS -r $PREFIX/alpine"
+ARGS="$ARGS -r $PREFIX/$DISTRO"
 ARGS="$ARGS -0"
 ARGS="$ARGS --link2symlink"
 ARGS="$ARGS --sysvipc"
@@ -129,15 +130,19 @@ FAILSAFE=false
 INSTALLING=false
 
 for arg in "$@"; do
-    case "$arg" in
-        --failsafe)
-            FAILSAFE=true
-            ;;
-        --installing)
-            INSTALLING=true
-            ;;
-    esac
-done
+        case "$arg" in
+            --failsafe)
+                FAILSAFE=true
+                ;;
+            --installing)
+                INSTALLING=true
+                ;;
+            --distro)
+                DISTRO="$2"
+                shift 2
+                ;;
+        esac
+    done
 
 if [ "$FAILSAFE" = true ] && [ "$INSTALLING" != true ]; then
     echo "$$" > "$PREFIX/pid"
@@ -150,5 +155,5 @@ if [ "$FAILSAFE" = true ] && [ "$INSTALLING" != true ]; then
 
     exec "$LINKER" "$PREFIX/axs" -c "sh"
 else
-    exec "$PROOT" $ARGS /bin/sh "$PREFIX/init-alpine.sh" "$@"
+    exec "$PROOT" $ARGS /bin/sh "$PREFIX/init-${DISTRO}.sh" "$@"
 fi

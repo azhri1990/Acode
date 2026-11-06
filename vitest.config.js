@@ -32,5 +32,11 @@ export default defineConfig({
 			"www/**",
 			"platforms/**",
 		],
+		// Timeout configuration to prevent hanging tests
+		testTimeout: 10000, // 10 seconds timeout for individual tests
+		hookTimeout: 10000, // 10 seconds timeout for setup/teardown hooks
+		// Serialize test execution to prevent cross-test interference
+		// from global stubs (editorManager, root) and shared module state
+		maxWorkers: 1,
 	},
 });

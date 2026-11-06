@@ -263,6 +263,27 @@ export default function terminalSettings() {
 			category: categories.maintenance,
 			chevron: true,
 		},
+		{
+			key: "installMyra",
+			text: "Install Myra Deep Research Assistant",
+			info: "Installs the Myra deep research assistant (Node.js-based) in the terminal environment.",
+			category: categories.maintenance,
+			chevron: true,
+		},
+		{
+			key: "distro",
+			text: strings["terminal distro"] || "Linux Distribution",
+			value: terminalValues.distro || "alpine",
+			select: [
+				["alpine", "Alpine Linux"],
+				["ubuntu", "Ubuntu Linux"],
+				["debian", "Debian Linux"],
+			],
+			info:
+				strings["terminal distro info"] ||
+				"Choose which Linux distribution to install in the terminal sandbox. Ubuntu and Debian require internet access on first run.",
+			category: categories.maintenance,
+		},
 	];
 
 	return settingsPage(title, items, callback, undefined, {
@@ -300,6 +321,26 @@ export default function terminalSettings() {
 
 			case "restore":
 				terminalRestore();
+				return;
+
+			case "installMyra":
+				loader.showTitleLoader();
+				Terminal.installMyra(
+					(msg) => console.log(msg),
+					(err) => console.error(err),
+				)
+					.then(() => {
+						loader.removeTitleLoader();
+						alert(
+							strings.success,
+							"Myra installed successfully! Run 'myra --help' in the terminal.",
+						);
+					})
+					.catch((error) => {
+						loader.removeTitleLoader();
+						console.error("Myra installation failed:", error);
+						helpers.error(error);
+					});
 				return;
 
 			case "uninstall":
