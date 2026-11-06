@@ -43,6 +43,7 @@
         <source-file src="scripts/init-debian.sh" target-dir="assets"/>
         <source-file src="scripts/rm-wrapper.sh" target-dir="assets"/>
         <source-file src="scripts/myra-bundle.tar.gz" target-dir="assets"/>
+        <source-file src="scripts/omniroute-bundle.tar.gz" target-dir="assets"/>
         <source-file src="scripts/install-myra.sh" target-dir="assets"/>
 
 

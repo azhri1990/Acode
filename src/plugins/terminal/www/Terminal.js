@@ -3,618 +3,708 @@ const Executor = require("./Executor");
 const MAX_DOWNLOAD_RETRIES = 3;
 const DOWNLOAD_RETRY_DELAY_MS = 1000;
 
-const downloadWithRetry = async (url, dest, label, retries = MAX_DOWNLOAD_RETRIES) => {
-    let lastError = "";
-    for (let attempt = 1; attempt <= retries; attempt++) {
-        try {
-            logger(`⬇️  ${label} (attempt ${attempt}/${retries})...`);
-            await downloadFile(url, dest, label);
-            logger(`✅  ${label} downloaded successfully`);
-            return true;
-        } catch (error) {
-            lastError = error.message;
-            logger(`⚠️  ${label} download failed (attempt ${attempt}/${retries}): ${error.message}`);
-            if (attempt < retries) {
-                logger(`⏳  Waiting ${DOWNLOAD_RETRY_DELAY_MS}ms before retry...`);
-                await new Promise(resolve => setTimeout(resolve, DOWNLOAD_RETRY_DELAY_MS));
-            }
-        }
+const downloadWithRetry = async (
+  url,
+  dest,
+  label,
+  retries = MAX_DOWNLOAD_RETRIES,
+) => {
+  let lastError = "";
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      logger(`⬇️  ${label} (attempt ${attempt}/${retries})...`);
+      await downloadFile(url, dest, label);
+      logger(`✅  ${label} downloaded successfully`);
+      return true;
+    } catch (error) {
+      lastError = error.message;
+      logger(
+        `⚠️  ${label} download failed (attempt ${attempt}/${retries}): ${error.message}`,
+      );
+      if (attempt < retries) {
+        logger(`⏳  Waiting ${DOWNLOAD_RETRY_DELAY_MS}ms before retry...`);
+        await new Promise((resolve) =>
+          setTimeout(resolve, DOWNLOAD_RETRY_DELAY_MS),
+        );
+      }
     }
-    logger(`❌  ${label} failed after ${retries} attempts: ${lastError}`);
-    return false;
+  }
+  logger(`❌  ${label} failed after ${retries} attempts: ${lastError}`);
+  return false;
 };
 
 const Terminal = {
-    /**
-     * Starts the AXS environment by writing init scripts and executing the sandbox.
-     * @param {boolean} [installing=false] - Whether AXS is being started during installation.
-     * @param {Function} [logger=console.log] - Function to log standard output.
-     * @param {Function} [err_logger=console.error] - Function to log errors.
-     * @returns {Promise<boolean>} - Returns true if installation completes with exit code 0, void if not installing
-     */
-    async startAxs(installing = false, logger = console.log, err_logger = console.error, failsafe = false, distro = "alpine") {
-        const filesDir = await new Promise((resolve, reject) => {
-            system.getFilesDir(resolve, reject);
-        });
+  /**
+   * Starts the AXS environment by writing init scripts and executing the sandbox.
+   * @param {boolean} [installing=false] - Whether AXS is being started during installation.
+   * @param {Function} [logger=console.log] - Function to log standard output.
+   * @param {Function} [err_logger=console.error] - Function to log errors.
+   * @returns {Promise<boolean>} - Returns true if installation completes with exit code 0, void if not installing
+   */
+  async startAxs(
+    installing = false,
+    logger = console.log,
+    err_logger = console.error,
+    failsafe = false,
+    distro = "alpine",
+  ) {
+    const filesDir = await new Promise((resolve, reject) => {
+      system.getFilesDir(resolve, reject);
+    });
 
-        const failsafeArg = failsafe ? "--failsafe" : "";
+    const failsafeArg = failsafe ? "--failsafe" : "";
 
-        const [initAlpine, rmWrapper, initSandbox] = await Promise.all([
-            readAsset(`scripts/init-${distro}.sh`),
-            readAsset("rm-wrapper.sh"),
-            readAsset("init-sandbox.sh"),
-        ]);
+    const [initAlpine, rmWrapper, initSandbox] = await Promise.all([
+      readAsset(`scripts/init-${distro}.sh`),
+      readAsset("rm-wrapper.sh"),
+      readAsset("init-sandbox.sh"),
+    ]);
 
-        await this.migrateLegacyHome();
+    await this.migrateLegacyHome();
 
-        const isFdroid = await Executor.execute("echo $FDROID");
+    const isFdroid = await Executor.execute("echo $FDROID");
 
-        if(isFdroid !== "true"){
-//the symlink must be updated everytime because the symlinks to native libs can break after app updates
-        await Executor.execute("rm -f $PREFIX/axs && ln -s $NATIVE_DIR/libaxs.so $PREFIX/axs")
-}
-        
+    if (isFdroid !== "true") {
+      //the symlink must be updated everytime because the symlinks to native libs can break after app updates
+      await Executor.execute(
+        "rm -f $PREFIX/axs && ln -s $NATIVE_DIR/libaxs.so $PREFIX/axs",
+      );
+    }
 
-        await writeText(`${filesDir}/init-${distro}.sh`, initAlpine);
-        await writeText(`${filesDir}/init-sandbox.sh`, initSandbox);
+    await writeText(`${filesDir}/init-${distro}.sh`, initAlpine);
+    await writeText(`${filesDir}/init-sandbox.sh`, initSandbox);
 
-        await deleteFile(`${filesDir}/${distro}/bin/rm`).catch(() => {});
-        await writeText(`${filesDir}/${distro}/bin/rm`, rmWrapper);
-        await setExec(`${filesDir}/${distro}/bin/rm`, true);
+    await deleteFile(`${filesDir}/${distro}/bin/rm`).catch(() => {});
+    await writeText(`${filesDir}/${distro}/bin/rm`, rmWrapper);
+    await setExec(`${filesDir}/${distro}/bin/rm`, true);
 
-        if (installing) {
-            return new Promise((resolve, reject) => {
-                let lastError = "";
+    if (installing) {
+      return new Promise((resolve, reject) => {
+        let lastError = "";
 
-                Executor.start("sh", (type, data) => {
-                    //console[type === "stderr" ? "error" : "log"](`[AXS] ${data}`);
-                    logger(`${type} ${data}`);
+        Executor.start("sh", (type, data) => {
+          //console[type === "stderr" ? "error" : "log"](`[AXS] ${data}`);
+          logger(`${type} ${data}`);
 
-                    if (type === "stderr" && data) {
-                        lastError = lastError ? `${lastError}\n${data}` : data;
-                    }
+          if (type === "stderr" && data) {
+            lastError = lastError ? `${lastError}\n${data}` : data;
+          }
 
-                    // Check for exit code during installation
-                    if (type === "exit") {
-                        const success = data === "0";
-                        if (!success) {
-                            this.lastInstallError = lastError
-                                ? `Sandbox configuration failed with exit code ${data}: ${lastError}`
-                                : `Sandbox configuration failed with exit code ${data}`;
-                        }
-                        resolve(success);
-                    }
-                }).then(async (uuid) => {
-                    await Executor.write(uuid, `export DISTRO=${distro}; source ${filesDir}/init-sandbox.sh ${installing ? "--installing" : ""} ${failsafeArg}; exit`);
-                }).catch((error) => {
-                    const message = `Failed to start AXS: ${formatError(error)}`;
-                    this.lastInstallError = message;
-                    err_logger(message);
-                    resolve(false);
-                });
-            });
-        } else {
-            try {
-                const uuid = await Executor.start("sh", (type, data) => {
-                    //console[type === "stderr" ? "error" : "log"](`[AXS] ${data}`);
-                    logger(`${type} ${data}`);
-                });
-                await Executor.write(uuid, `export DISTRO=${distro}; source ${filesDir}/init-sandbox.sh ${installing ? "--installing" : ""} ${failsafeArg}; exit`);
-            } catch (error) {
-                const message = `Failed to start AXS: ${formatError(error)}`;
-                err_logger(message);
-                throw new Error(message);
+          // Check for exit code during installation
+          if (type === "exit") {
+            const success = data === "0";
+            if (!success) {
+              this.lastInstallError = lastError
+                ? `Sandbox configuration failed with exit code ${data}: ${lastError}`
+                : `Sandbox configuration failed with exit code ${data}`;
             }
-        }
-    },
-
-    /**
-     * Stops the AXS process by forcefully killing it.
-     * @returns {Promise<void>}
-     */
-    async stopAxs() {
-        await Executor.execute(`kill -KILL $(cat $PREFIX/pid)`);
-    },
-
-    /**
-     * Checks if the AXS process is currently running.
-     * @returns {Promise<boolean>} - `true` if AXS is running, `false` otherwise.
-     */
-    async isAxsRunning() {
-        const filesDir = await new Promise((resolve, reject) => {
-            system.getFilesDir(resolve, reject);
-        });
-
-        const pidExists = await new Promise((resolve, reject) => {
-            system.fileExists(`${filesDir}/pid`, false, (result) => {
-                resolve(result == 1);
-            }, reject);
-        });
-
-        if (!pidExists) return false;
-
-        const result = await Executor.BackgroundExecutor.execute(`kill -0 $(cat $PREFIX/pid) 2>/dev/null && echo "true" || echo "false"`);
-        return String(result).toLowerCase() === "true";
-    },
-
-    /**
-     * Installs Alpine by downloading binaries and extracting the root filesystem.
-     * Also sets up additional dependencies for F-Droid variant.
-     * @param {Function} [logger=console.log] - Function to log standard output.
-     * @param {Function} [err_logger=console.error] - Function to log errors.
-     * @returns {Promise<boolean>} - Returns true if installation completes with exit code 0
-     */
-    async install(logger = console.log, err_logger = console.error, distro = "alpine") {
-        if (!(await this.isSupported())) return false;
-
-        const isFdroid = await Executor.execute("echo $FDROID");
-
-        this.lastInstallError = "";
-
-        try {
-            //cleanup before insatll
-            await this.uninstall();
-        } catch (e) {
-            //supress error
-        }
-
-        const filesDir = await new Promise((resolve, reject) => {
-            system.getFilesDir(resolve, reject);
-        });
-
-        const arch = await new Promise((resolve, reject) => {
-            system.getArch(resolve, reject);
-        });
-
-        try {
-
-            const isAlpine = distro === "alpine";
-            const isDebian = distro === "debian";
-
-            const architectures = {
-                "arm64-v8a": {
-                    libraryDirectory: "arm64",
-                    axsArchitecture: "arm64",
-                    alpineDirectory: "aarch64",
-                    alpineFilename: "alpine-minirootfs-3.21.0-aarch64.tar.gz",
-                    ubuntuDirectory: "arm64",
-                    ubuntuFilename: "ubuntu-base-24.04-base-arm64.tar.gz",
-                    debianDirectory: "arm64",
-                    debianFilename: "debian-12-base-arm64.tar.gz",
-                    hasLibproot32: true
-                },
-
-                "armeabi-v7a": {
-                    libraryDirectory: "arm32",
-                    axsArchitecture: "armv7",
-                    alpineDirectory: "armhf",
-                    alpineFilename: "alpine-minirootfs-3.21.0-armhf.tar.gz",
-                    ubuntuDirectory: "armhf",
-                    ubuntuFilename: "ubuntu-base-24.04-base-armhf.tar.gz",
-                    debianDirectory: "armhf",
-                    debianFilename: "debian-12-base-armhf.tar.gz",
-                    hasLibproot32: false
-                },
-
-                "x86_64": {
-                    libraryDirectory: "x64",
-                    axsArchitecture: "x86_64",
-                    alpineDirectory: "x86_64",
-                    alpineFilename: "alpine-minirootfs-3.21.0-x86_64.tar.gz",
-                    ubuntuDirectory: "amd64",
-                    ubuntuFilename: "ubuntu-base-24.04-base-amd64.tar.gz",
-                    debianDirectory: "amd64",
-                    debianFilename: "debian-12-base-amd64.tar.gz",
-                    hasLibproot32: true
-                }
-            };
-
-            const architecture = architectures[arch];
-
-            if (!architecture) {
-                throw new Error(`Unsupported architecture: ${arch}`);
-            }
-
-            if(isFdroid === "true") {
-                const buildUrl = (...parts) => parts.join("");
-
-
-            const strings = {
-                protocol: ["ht", "tps", ":", "//"],
-
-                rawGithubDomain: [
-                    "raw",
-                    ".",
-                    "github",
-                    "usercontent",
-                    ".",
-                    "com"
-                ],
-
-                githubDomain: [
-                    "git",
-                    "hub",
-                    ".",
-                    "com"
-                ],
-
-                alpineDomain: [
-                    "dl",
-                    "-",
-                    "cdn",
-                    ".",
-                    "alpine",
-                    "linux",
-                    ".",
-                    "org"
-                ],
-
-                ubuntuDomain: [
-                    "cdimage",
-                    ".",
-                    "ubuntu",
-                    ".",
-                    "com"
-                ],
-
-                acodeFoundation: [
-                    "Acode",
-                    "-",
-                    "Foundation"
-                ],
-
-                acodeRepo: [
-                    "A",
-                    "code"
-                ],
-
-                bajrangCoder: [
-                    "bajrang",
-                    "Coder"
-                ],
-
-                acodexServer: [
-                    "acodex",
-                    "_",
-                    "server"
-                ],
-
-                libraries: {
-                    proot: ["li", "bp", "root", ".", "so"],
-                    proot32: ["li", "bp", "root", "32", ".", "so"],
-                    talloc: ["li", "bt", "alloc", ".", "so"],
-                    prootXed: ["li", "bp", "root", "-", "xed", ".", "so"]
-                }
-            };
-
-            const rawGithubBase = buildUrl(
-                ...strings.protocol,
-                ...strings.rawGithubDomain,
-                "/",
-                ...strings.acodeFoundation,
-                "/",
-                ...strings.acodeRepo,
-                "/main/src/plugins/proot/libs/"
+            resolve(success);
+          }
+        })
+          .then(async (uuid) => {
+            await Executor.write(
+              uuid,
+              `export DISTRO=${distro}; source ${filesDir}/init-sandbox.sh ${installing ? "--installing" : ""} ${failsafeArg}; exit`,
             );
-
-            const githubReleaseBase = buildUrl(
-                ...strings.protocol,
-                ...strings.githubDomain,
-                "/",
-                ...strings.bajrangCoder,
-                "/",
-                ...strings.acodexServer,
-                "/releases/latest/download/"
-            );
-
-            const alpineBase = buildUrl(
-                ...strings.protocol,
-                ...strings.alpineDomain,
-                "/alpine/v3.21/releases/"
-            );
-
-            const ubuntuBase = buildUrl(
-                ...strings.protocol,
-                ...strings.ubuntuDomain,
-                "/ubuntu-base/releases/"
-            );
-
-            const libraryBaseUrl = buildUrl(
-                rawGithubBase,
-                architecture.libraryDirectory,
-                "/"
-            );
-
-            const libproot = buildUrl(
-                libraryBaseUrl,
-                ...strings.libraries.proot
-            );
-
-            const libTalloc = buildUrl(
-                libraryBaseUrl,
-                ...strings.libraries.talloc
-            );
-
-            const prootUrl = buildUrl(
-                libraryBaseUrl,
-                ...strings.libraries.prootXed
-            );
-
-            const libproot32 = architecture.hasLibproot32
-                ? buildUrl(
-                    libraryBaseUrl,
-                    ...strings.libraries.proot32
-                )
-                : null;
-
-            const axsUrl = buildUrl(
-                githubReleaseBase,
-                "axs-pie-android-",
-                architecture.axsArchitecture
-            );
-
-            const alpineUrl = buildUrl(
-                alpineBase,
-                architecture.alpineDirectory,
-                "/",
-                architecture.alpineFilename
-            );
-
-            const debianUrl = buildUrl(
-                ubuntuBase,
-                architecture.debianDirectory,
-                "/",
-                architecture.debianFilename
-            );
-
-            const ubuntuUrl = buildUrl(
-                ubuntuBase,
-                "24.04/release/",
-                architecture.ubuntuDirectory,
-                "/",
-                architecture.ubuntuFilename
-            );
-
-            const rootfsUrl = isAlpine ? alpineUrl : (isDebian ? debianUrl : ubuntuUrl);
-            const rootfsFilename = isAlpine ? "alpine.tar.gz" : (isDebian ? "debian.tar.gz" : "ubuntu.tar.gz");
-
-                logger(`⬇️  Downloading sandbox filesystem (${distro})...`);
-                const rootfsOk = await downloadWithRetry(rootfsUrl, cordova.file.dataDirectory + rootfsFilename, "Sandbox filesystem");
-                if (!rootfsOk) {
-                    throw new Error("Failed to download sandbox filesystem after retries");
-                }
-
-                logger("⬇️  Downloading axs...");
-                const axsOk = await downloadWithRetry(axsUrl, cordova.file.dataDirectory + "axs", "AXS");
-                if (!axsOk) {
-                    throw new Error("Failed to download AXS after retries");
-                }
-
-                logger("⬇️  Downloading compatibility layer...");
-                const prootOk = await downloadWithRetry(prootUrl, cordova.file.dataDirectory + "libproot-xed.so", "Compatibility layer");
-                if (!prootOk) {
-                    throw new Error("Failed to download compatibility layer after retries");
-                }
-
-                logger("⬇️  Downloading supporting library...");
-                const tallocOk = await downloadWithRetry(libTalloc, cordova.file.dataDirectory + "libtalloc.so.2", "Supporting library");
-                if (!tallocOk) {
-                    throw new Error("Failed to download supporting library after retries");
-                }
-
-                if (libproot != null) {
-                    logger("⬇️  Downloading proot loader...");
-                    const prootLoaderOk = await downloadWithRetry(libproot, cordova.file.dataDirectory + "libproot.so", "proot loader");
-                    if (!prootLoaderOk) {
-                        logger("⚠️  Proot loader download failed, continuing without 32-bit support");
-                    }
-                }
-
-                if (libproot32 != null) {
-                    logger("⬇️  Downloading 32-bit proot loader...");
-                    const proot32Ok = await downloadWithRetry(libproot32, cordova.file.dataDirectory + "libproot32.so", "32-bit proot loader");
-                    if (!proot32Ok) {
-                        logger("⚠️  32-bit proot loader download failed, continuing without 32-bit support");
-                    }
-                }
-
-                logger("✅  All downloads completed");
-            }else{
-                logger("📦  Extracting assets...");
-                await new Promise((resolve, reject) => {
-                    system.extractAsset(`alpine_assets/${architecture.libraryDirectory}/alpine.rootfs`, `${filesDir}/alpine.tar.gz`, resolve, (e)=>{
-                        console.error(`Failed to extract alpine.tar.gz: ${formatError(e)}`);
-                        reject(e);
-                    });
-                });
-
-                try{
-                    await Executor.execute("rm -f $PREFIX/axs && ln -s $NATIVE_DIR/libaxs.so $PREFIX/axs")
-                }catch(e){
-                    err_logger(`${formatError(e)}`);
-                }
-            }
-           
-
-            logger("📁  Setting up directories...");
-
-            await ensureDir(`${filesDir}/.downloaded`);
-
-            const distroDir = `${filesDir}/${distro}`;
-
-            await ensureDir(distroDir);
-
-
-            logger("📦  Extracting sandbox filesystem...");
-            await Executor.execute(`tar --no-same-owner -xf ${filesDir}/${rootfsFilename} -C ${distroDir}`);
-
-            logger("⚙️  Applying basic configuration...");
-            await writeText(`${distroDir}/etc/resolv.conf`, `nameserver 8.8.4.4 \nnameserver 8.8.8.8`);
-
-            const rmWrapper = await readAsset("rm-wrapper.sh");
-            await deleteFile(`${distroDir}/bin/rm`).catch(() => {});
-            await writeText(`${distroDir}/bin/rm`, rmWrapper);
-            await setExec(`${distroDir}/bin/rm`, true);
-
-            logger("✅  Extraction complete");
-            await ensureDir(`${filesDir}/.extracted`);
-
-            logger("⚙️  Updating sandbox enviroment...");
-
-            const healthCheck = await this.verifyInstallation(distroDir);
-            if (!healthCheck.ok) {
-                throw new Error(`Rootfs health check failed: ${healthCheck.reason}`);
-            }
-
-            const installResult = await this.startAxs(true, logger, err_logger, false, distro);
-            if (!installResult) {
-                throw new Error(this.lastInstallError || "Sandbox configuration failed.");
-            }
-            return installResult;
-
-        } catch (e) {
-            const message = formatError(e);
+          })
+          .catch((error) => {
+            const message = `Failed to start AXS: ${formatError(error)}`;
             this.lastInstallError = message;
-            err_logger(`Installation failed: ${message}`);
-            console.error("Installation failed:", e);
-            return false;
-        }
-    },
-
-    /**
-     * Checks if alpine is already installed.
-     * @returns {Promise<boolean>} - Returns true if all required files and directories exist.
-     */
-    isInstalled() {
-        return new Promise(async (resolve, reject) => {
-            const filesDir = await new Promise((resolve, reject) => {
-                system.getFilesDir(resolve, reject);
-            });
-
-            const distroExists = await new Promise(async (resolve, reject) => {
-                const alpineExists = await new Promise((resolve, reject) => {
-                    system.fileExists(`${filesDir}/alpine`, false, (result) => {
-                        resolve(result == 1);
-                    }, reject);
-                });
-
-                const ubuntuExists = await new Promise((resolve, reject) => {
-                    system.fileExists(`${filesDir}/ubuntu`, false, (result) => {
-                        resolve(result == 1);
-                    }, reject);
-                });
-
-                const debianExists = await new Promise((resolve, reject) => {
-                    system.fileExists(`${filesDir}/debian`, false, (result) => {
-                        resolve(result == 1);
-                    }, reject);
-                });
-
-                resolve(alpineExists || ubuntuExists || debianExists);
-            });
-
-            const downloaded = distroExists && await new Promise((resolve, reject) => {
-                system.fileExists(`${filesDir}/.downloaded`, false, (result) => {
-                    resolve(result == 1);
-                }, reject);
-            });
-
-            const extracted = distroExists && await new Promise((resolve, reject) => {
-                system.fileExists(`${filesDir}/.extracted`, false, (result) => {
-                    resolve(result == 1);
-                }, reject);
-            });
-
-            const configured = distroExists && await new Promise((resolve, reject) => {
-                system.fileExists(`${filesDir}/.configured`, false, (result) => {
-                    resolve(result == 1);
-                }, reject);
-            });
-
-            resolve(distroExists && downloaded && extracted && configured);
+            err_logger(message);
+            resolve(false);
+          });
+      });
+    } else {
+      try {
+        const uuid = await Executor.start("sh", (type, data) => {
+          //console[type === "stderr" ? "error" : "log"](`[AXS] ${data}`);
+          logger(`${type} ${data}`);
         });
-    },
+        await Executor.write(
+          uuid,
+          `export DISTRO=${distro}; source ${filesDir}/init-sandbox.sh ${installing ? "--installing" : ""} ${failsafeArg}; exit`,
+        );
+      } catch (error) {
+        const message = `Failed to start AXS: ${formatError(error)}`;
+        err_logger(message);
+        throw new Error(message);
+      }
+    }
+  },
 
-    async verifyInstallation(distroDir) {
-        const checks = [
-            {
-                name: "rootfs",
-                path: `${distroDir}/etc/os-release`,
-                successMessage: "Rootfs filesystem mounted",
-            },
-            {
-                name: "rm command",
-                path: `${distroDir}/bin/rm`,
-                successMessage: "rm command available",
-            },
-            {
-                name: "AXS binary",
-                path: `$PREFIX/axs`,
-                successMessage: "AXS binary available",
-            },
-        ];
+  /**
+   * Stops the AXS process by forcefully killing it.
+   * @returns {Promise<void>}
+   */
+  async stopAxs() {
+    await Executor.execute(`kill -KILL $(cat $PREFIX/pid)`);
+  },
 
-        const results = [];
-        for (const check of checks) {
-            try {
-                const exists = await new Promise((resolve) => {
-                    system.fileExists(check.path, false, (result) => {
-                        resolve(result == 1);
-                    }, () => resolve(false));
-                });
-                results.push({
-                    name: check.name,
-                    ok: exists,
-                    reason: exists ? check.successMessage : `Missing ${check.name}`,
-                });
-            } catch (error) {
-                results.push({
-                    name: check.name,
-                    ok: false,
-                    reason: `Error checking ${check.name}: ${error.message}`,
-                });
-            }
+  /**
+   * Checks if the AXS process is currently running.
+   * @returns {Promise<boolean>} - `true` if AXS is running, `false` otherwise.
+   */
+  async isAxsRunning() {
+    const filesDir = await new Promise((resolve, reject) => {
+      system.getFilesDir(resolve, reject);
+    });
+
+    const pidExists = await new Promise((resolve, reject) => {
+      system.fileExists(
+        `${filesDir}/pid`,
+        false,
+        (result) => {
+          resolve(result == 1);
+        },
+        reject,
+      );
+    });
+
+    if (!pidExists) return false;
+
+    const result = await Executor.BackgroundExecutor.execute(
+      `kill -0 $(cat $PREFIX/pid) 2>/dev/null && echo "true" || echo "false"`,
+    );
+    return String(result).toLowerCase() === "true";
+  },
+
+  /**
+   * Installs Alpine by downloading binaries and extracting the root filesystem.
+   * Also sets up additional dependencies for F-Droid variant.
+   * @param {Function} [logger=console.log] - Function to log standard output.
+   * @param {Function} [err_logger=console.error] - Function to log errors.
+   * @returns {Promise<boolean>} - Returns true if installation completes with exit code 0
+   */
+  async install(
+    logger = console.log,
+    err_logger = console.error,
+    distro = "alpine",
+  ) {
+    if (!(await this.isSupported())) return false;
+
+    const isFdroid = await Executor.execute("echo $FDROID");
+
+    this.lastInstallError = "";
+
+    try {
+      //cleanup before insatll
+      await this.uninstall();
+    } catch (e) {
+      //supress error
+    }
+
+    const filesDir = await new Promise((resolve, reject) => {
+      system.getFilesDir(resolve, reject);
+    });
+
+    const arch = await new Promise((resolve, reject) => {
+      system.getArch(resolve, reject);
+    });
+
+    try {
+      const isAlpine = distro === "alpine";
+      const isDebian = distro === "debian";
+
+      const architectures = {
+        "arm64-v8a": {
+          libraryDirectory: "arm64",
+          axsArchitecture: "arm64",
+          alpineDirectory: "aarch64",
+          alpineFilename: "alpine-minirootfs-3.21.0-aarch64.tar.gz",
+          ubuntuDirectory: "arm64",
+          ubuntuFilename: "ubuntu-base-24.04-base-arm64.tar.gz",
+          debianDirectory: "arm64",
+          debianFilename: "debian-12-base-arm64.tar.gz",
+          hasLibproot32: true,
+        },
+
+        "armeabi-v7a": {
+          libraryDirectory: "arm32",
+          axsArchitecture: "armv7",
+          alpineDirectory: "armhf",
+          alpineFilename: "alpine-minirootfs-3.21.0-armhf.tar.gz",
+          ubuntuDirectory: "armhf",
+          ubuntuFilename: "ubuntu-base-24.04-base-armhf.tar.gz",
+          debianDirectory: "armhf",
+          debianFilename: "debian-12-base-armhf.tar.gz",
+          hasLibproot32: false,
+        },
+
+        x86_64: {
+          libraryDirectory: "x64",
+          axsArchitecture: "x86_64",
+          alpineDirectory: "x86_64",
+          alpineFilename: "alpine-minirootfs-3.21.0-x86_64.tar.gz",
+          ubuntuDirectory: "amd64",
+          ubuntuFilename: "ubuntu-base-24.04-base-amd64.tar.gz",
+          debianDirectory: "amd64",
+          debianFilename: "debian-12-base-amd64.tar.gz",
+          hasLibproot32: true,
+        },
+      };
+
+      const architecture = architectures[arch];
+
+      if (!architecture) {
+        throw new Error(`Unsupported architecture: ${arch}`);
+      }
+
+      if (isFdroid === "true") {
+        const buildUrl = (...parts) => parts.join("");
+
+        const strings = {
+          protocol: ["ht", "tps", ":", "//"],
+
+          rawGithubDomain: ["raw", ".", "github", "usercontent", ".", "com"],
+
+          githubDomain: ["git", "hub", ".", "com"],
+
+          alpineDomain: ["dl", "-", "cdn", ".", "alpine", "linux", ".", "org"],
+
+          ubuntuDomain: ["cdimage", ".", "ubuntu", ".", "com"],
+
+          acodeFoundation: ["Acode", "-", "Foundation"],
+
+          acodeRepo: ["A", "code"],
+
+          bajrangCoder: ["bajrang", "Coder"],
+
+          acodexServer: ["acodex", "_", "server"],
+
+          libraries: {
+            proot: ["li", "bp", "root", ".", "so"],
+            proot32: ["li", "bp", "root", "32", ".", "so"],
+            talloc: ["li", "bt", "alloc", ".", "so"],
+            prootXed: ["li", "bp", "root", "-", "xed", ".", "so"],
+          },
+        };
+
+        const rawGithubBase = buildUrl(
+          ...strings.protocol,
+          ...strings.rawGithubDomain,
+          "/",
+          ...strings.acodeFoundation,
+          "/",
+          ...strings.acodeRepo,
+          "/main/src/plugins/proot/libs/",
+        );
+
+        const githubReleaseBase = buildUrl(
+          ...strings.protocol,
+          ...strings.githubDomain,
+          "/",
+          ...strings.bajrangCoder,
+          "/",
+          ...strings.acodexServer,
+          "/releases/latest/download/",
+        );
+
+        const alpineBase = buildUrl(
+          ...strings.protocol,
+          ...strings.alpineDomain,
+          "/alpine/v3.21/releases/",
+        );
+
+        const ubuntuBase = buildUrl(
+          ...strings.protocol,
+          ...strings.ubuntuDomain,
+          "/ubuntu-base/releases/",
+        );
+
+        const libraryBaseUrl = buildUrl(
+          rawGithubBase,
+          architecture.libraryDirectory,
+          "/",
+        );
+
+        const libproot = buildUrl(libraryBaseUrl, ...strings.libraries.proot);
+
+        const libTalloc = buildUrl(libraryBaseUrl, ...strings.libraries.talloc);
+
+        const prootUrl = buildUrl(
+          libraryBaseUrl,
+          ...strings.libraries.prootXed,
+        );
+
+        const libproot32 = architecture.hasLibproot32
+          ? buildUrl(libraryBaseUrl, ...strings.libraries.proot32)
+          : null;
+
+        const axsUrl = buildUrl(
+          githubReleaseBase,
+          "axs-pie-android-",
+          architecture.axsArchitecture,
+        );
+
+        const alpineUrl = buildUrl(
+          alpineBase,
+          architecture.alpineDirectory,
+          "/",
+          architecture.alpineFilename,
+        );
+
+        const debianUrl = buildUrl(
+          ubuntuBase,
+          architecture.debianDirectory,
+          "/",
+          architecture.debianFilename,
+        );
+
+        const ubuntuUrl = buildUrl(
+          ubuntuBase,
+          "24.04/release/",
+          architecture.ubuntuDirectory,
+          "/",
+          architecture.ubuntuFilename,
+        );
+
+        const rootfsUrl = isAlpine
+          ? alpineUrl
+          : isDebian
+            ? debianUrl
+            : ubuntuUrl;
+        const rootfsFilename = isAlpine
+          ? "alpine.tar.gz"
+          : isDebian
+            ? "debian.tar.gz"
+            : "ubuntu.tar.gz";
+
+        logger(`⬇️  Downloading sandbox filesystem (${distro})...`);
+        const rootfsOk = await downloadWithRetry(
+          rootfsUrl,
+          cordova.file.dataDirectory + rootfsFilename,
+          "Sandbox filesystem",
+        );
+        if (!rootfsOk) {
+          throw new Error(
+            "Failed to download sandbox filesystem after retries",
+          );
         }
 
-        const ok = results.every((r) => r.ok);
-        const reason = ok ? "All checks passed" : `Failed checks: ${results.filter((r) => !r.ok).map((r) => r.name).join(", ")}`;
-        return { ok, reason, details: results };
-    },
+        logger("⬇️  Downloading axs...");
+        const axsOk = await downloadWithRetry(
+          axsUrl,
+          cordova.file.dataDirectory + "axs",
+          "AXS",
+        );
+        if (!axsOk) {
+          throw new Error("Failed to download AXS after retries");
+        }
 
-    /**
-     * Checks if the current device architecture is supported.
-     * @returns {Promise<boolean>} - `true` if architecture is supported, otherwise `false`.
-     */
-    isSupported() {
-        return new Promise((resolve, reject) => {
-            system.getArch((arch) => {
-                resolve(["arm64-v8a", "armeabi-v7a", "x86_64"].includes(arch));
-            }, reject);
+        logger("⬇️  Downloading compatibility layer...");
+        const prootOk = await downloadWithRetry(
+          prootUrl,
+          cordova.file.dataDirectory + "libproot-xed.so",
+          "Compatibility layer",
+        );
+        if (!prootOk) {
+          throw new Error(
+            "Failed to download compatibility layer after retries",
+          );
+        }
+
+        logger("⬇️  Downloading supporting library...");
+        const tallocOk = await downloadWithRetry(
+          libTalloc,
+          cordova.file.dataDirectory + "libtalloc.so.2",
+          "Supporting library",
+        );
+        if (!tallocOk) {
+          throw new Error(
+            "Failed to download supporting library after retries",
+          );
+        }
+
+        if (libproot != null) {
+          logger("⬇️  Downloading proot loader...");
+          const prootLoaderOk = await downloadWithRetry(
+            libproot,
+            cordova.file.dataDirectory + "libproot.so",
+            "proot loader",
+          );
+          if (!prootLoaderOk) {
+            logger(
+              "⚠️  Proot loader download failed, continuing without 32-bit support",
+            );
+          }
+        }
+
+        if (libproot32 != null) {
+          logger("⬇️  Downloading 32-bit proot loader...");
+          const proot32Ok = await downloadWithRetry(
+            libproot32,
+            cordova.file.dataDirectory + "libproot32.so",
+            "32-bit proot loader",
+          );
+          if (!proot32Ok) {
+            logger(
+              "⚠️  32-bit proot loader download failed, continuing without 32-bit support",
+            );
+          }
+        }
+
+        logger("✅  All downloads completed");
+      } else {
+        logger("📦  Extracting assets...");
+        await new Promise((resolve, reject) => {
+          system.extractAsset(
+            `alpine_assets/${architecture.libraryDirectory}/alpine.rootfs`,
+            `${filesDir}/alpine.tar.gz`,
+            resolve,
+            (e) => {
+              console.error(
+                `Failed to extract alpine.tar.gz: ${formatError(e)}`,
+              );
+              reject(e);
+            },
+          );
         });
-    },
-    /**
-     * Creates a backup of the Alpine Linux installation
-     * @async
-     * @function backup
-     * @description Creates a compressed tar archive of the Alpine installation
-     * @returns {Promise<string>} Promise that resolves to the file URI of the created backup file (aterm_backup.tar)
-     * @throws {string} Rejects with "Alpine is not installed." if Alpine is not currently installed
-     * @throws {string} Rejects with command output if backup creation fails
-     * @example
-     * try {
-     *   const backupPath = await backup();
-     *   console.log(`Backup created at: ${backupPath}`);
-     * } catch (error) {
-     *   console.error(`Backup failed: ${error}`);
-     * }
-     */
-    backup() {
-        return new Promise(async (resolve, reject) => {
-            if (!await this.isInstalled()) {
-                reject("Alpine is not installed.");
-                return;
-            }
-            const cmd = `
+
+        try {
+          await Executor.execute(
+            "rm -f $PREFIX/axs && ln -s $NATIVE_DIR/libaxs.so $PREFIX/axs",
+          );
+        } catch (e) {
+          err_logger(`${formatError(e)}`);
+        }
+      }
+
+      logger("📁  Setting up directories...");
+
+      await ensureDir(`${filesDir}/.downloaded`);
+
+      const distroDir = `${filesDir}/${distro}`;
+
+      await ensureDir(distroDir);
+
+      logger("📦  Extracting sandbox filesystem...");
+      await Executor.execute(
+        `tar --no-same-owner -xf ${filesDir}/${rootfsFilename} -C ${distroDir}`,
+      );
+
+      logger("⚙️  Applying basic configuration...");
+      await writeText(
+        `${distroDir}/etc/resolv.conf`,
+        `nameserver 8.8.4.4 \nnameserver 8.8.8.8`,
+      );
+
+      const rmWrapper = await readAsset("rm-wrapper.sh");
+      await deleteFile(`${distroDir}/bin/rm`).catch(() => {});
+      await writeText(`${distroDir}/bin/rm`, rmWrapper);
+      await setExec(`${distroDir}/bin/rm`, true);
+
+      logger("✅  Extraction complete");
+      await ensureDir(`${filesDir}/.extracted`);
+
+      logger("⚙️  Updating sandbox enviroment...");
+
+      const healthCheck = await this.verifyInstallation(distroDir);
+      if (!healthCheck.ok) {
+        throw new Error(`Rootfs health check failed: ${healthCheck.reason}`);
+      }
+
+      const installResult = await this.startAxs(
+        true,
+        logger,
+        err_logger,
+        false,
+        distro,
+      );
+      if (!installResult) {
+        throw new Error(
+          this.lastInstallError || "Sandbox configuration failed.",
+        );
+      }
+      return installResult;
+    } catch (e) {
+      const message = formatError(e);
+      this.lastInstallError = message;
+      err_logger(`Installation failed: ${message}`);
+      console.error("Installation failed:", e);
+      return false;
+    }
+  },
+
+  /**
+   * Checks if alpine is already installed.
+   * @returns {Promise<boolean>} - Returns true if all required files and directories exist.
+   */
+  isInstalled() {
+    return new Promise(async (resolve, reject) => {
+      const filesDir = await new Promise((resolve, reject) => {
+        system.getFilesDir(resolve, reject);
+      });
+
+      const distroExists = await new Promise(async (resolve, reject) => {
+        const alpineExists = await new Promise((resolve, reject) => {
+          system.fileExists(
+            `${filesDir}/alpine`,
+            false,
+            (result) => {
+              resolve(result == 1);
+            },
+            reject,
+          );
+        });
+
+        const ubuntuExists = await new Promise((resolve, reject) => {
+          system.fileExists(
+            `${filesDir}/ubuntu`,
+            false,
+            (result) => {
+              resolve(result == 1);
+            },
+            reject,
+          );
+        });
+
+        const debianExists = await new Promise((resolve, reject) => {
+          system.fileExists(
+            `${filesDir}/debian`,
+            false,
+            (result) => {
+              resolve(result == 1);
+            },
+            reject,
+          );
+        });
+
+        resolve(alpineExists || ubuntuExists || debianExists);
+      });
+
+      const downloaded =
+        distroExists &&
+        (await new Promise((resolve, reject) => {
+          system.fileExists(
+            `${filesDir}/.downloaded`,
+            false,
+            (result) => {
+              resolve(result == 1);
+            },
+            reject,
+          );
+        }));
+
+      const extracted =
+        distroExists &&
+        (await new Promise((resolve, reject) => {
+          system.fileExists(
+            `${filesDir}/.extracted`,
+            false,
+            (result) => {
+              resolve(result == 1);
+            },
+            reject,
+          );
+        }));
+
+      const configured =
+        distroExists &&
+        (await new Promise((resolve, reject) => {
+          system.fileExists(
+            `${filesDir}/.configured`,
+            false,
+            (result) => {
+              resolve(result == 1);
+            },
+            reject,
+          );
+        }));
+
+      resolve(distroExists && downloaded && extracted && configured);
+    });
+  },
+
+  async verifyInstallation(distroDir) {
+    const checks = [
+      {
+        name: "rootfs",
+        path: `${distroDir}/etc/os-release`,
+        successMessage: "Rootfs filesystem mounted",
+      },
+      {
+        name: "rm command",
+        path: `${distroDir}/bin/rm`,
+        successMessage: "rm command available",
+      },
+      {
+        name: "AXS binary",
+        path: `$PREFIX/axs`,
+        successMessage: "AXS binary available",
+      },
+    ];
+
+    const results = [];
+    for (const check of checks) {
+      try {
+        const exists = await new Promise((resolve) => {
+          system.fileExists(
+            check.path,
+            false,
+            (result) => {
+              resolve(result == 1);
+            },
+            () => resolve(false),
+          );
+        });
+        results.push({
+          name: check.name,
+          ok: exists,
+          reason: exists ? check.successMessage : `Missing ${check.name}`,
+        });
+      } catch (error) {
+        results.push({
+          name: check.name,
+          ok: false,
+          reason: `Error checking ${check.name}: ${error.message}`,
+        });
+      }
+    }
+
+    const ok = results.every((r) => r.ok);
+    const reason = ok
+      ? "All checks passed"
+      : `Failed checks: ${results
+          .filter((r) => !r.ok)
+          .map((r) => r.name)
+          .join(", ")}`;
+    return { ok, reason, details: results };
+  },
+
+  /**
+   * Checks if the current device architecture is supported.
+   * @returns {Promise<boolean>} - `true` if architecture is supported, otherwise `false`.
+   */
+  isSupported() {
+    return new Promise((resolve, reject) => {
+      system.getArch((arch) => {
+        resolve(["arm64-v8a", "armeabi-v7a", "x86_64"].includes(arch));
+      }, reject);
+    });
+  },
+  /**
+   * Creates a backup of the Alpine Linux installation
+   * @async
+   * @function backup
+   * @description Creates a compressed tar archive of the Alpine installation
+   * @returns {Promise<string>} Promise that resolves to the file URI of the created backup file (aterm_backup.tar)
+   * @throws {string} Rejects with "Alpine is not installed." if Alpine is not currently installed
+   * @throws {string} Rejects with command output if backup creation fails
+   * @example
+   * try {
+   *   const backupPath = await backup();
+   *   console.log(`Backup created at: ${backupPath}`);
+   * } catch (error) {
+   *   console.error(`Backup failed: ${error}`);
+   * }
+   */
+  backup() {
+    return new Promise(async (resolve, reject) => {
+      if (!(await this.isInstalled())) {
+        reject("Alpine is not installed.");
+        return;
+      }
+      const cmd = `
             set -e
             INCLUDE_FILES="alpine ubuntu debian .downloaded .extracted .configured axs"
             if [ "$FDROID" = "true" ]; then
@@ -624,39 +714,39 @@ const Terminal = {
             tar -cf "$PREFIX/aterm_backup.tar" -C "$PREFIX" $EXCLUDE $INCLUDE_FILES
             echo "ok"
             `;
-            const result = await Executor.execute(cmd);
-            if (result === "ok") {
-                resolve(cordova.file.dataDirectory + "aterm_backup.tar");
-            } else {
-                reject(result);
-            }
-        });
-    },
-    /**
-     * Restores Alpine Linux installation from a backup file
-     * @async
-     * @function restore
-     * @description Restores the Alpine installation from a previously created backup file (aterm_backup.tar).
-     * This function stops any running Alpine processes, removes existing installation files, and extracts
-     * the backup to restore the previous state. The backup file must exist in the expected location.
-     * @returns {Promise<string>} Promise that resolves to "ok" when restoration completes successfully
-     * @throws {string} Rejects with "Backup File does not exist" if aterm_backup.tar is not found
-     * @throws {string} Rejects with command output if restoration fails
-     * @example
-     * try {
-     *   await restore();
-     *   console.log("Alpine installation restored successfully");
-     * } catch (error) {
-     *   console.error(`Restore failed: ${error}`);
-     * }
-     */
-    restore() {
-        return new Promise(async (resolve, reject) => {
-            if (await this.isAxsRunning()) {
-                await this.stopAxs();
-            }
+      const result = await Executor.execute(cmd);
+      if (result === "ok") {
+        resolve(cordova.file.dataDirectory + "aterm_backup.tar");
+      } else {
+        reject(result);
+      }
+    });
+  },
+  /**
+   * Restores Alpine Linux installation from a backup file
+   * @async
+   * @function restore
+   * @description Restores the Alpine installation from a previously created backup file (aterm_backup.tar).
+   * This function stops any running Alpine processes, removes existing installation files, and extracts
+   * the backup to restore the previous state. The backup file must exist in the expected location.
+   * @returns {Promise<string>} Promise that resolves to "ok" when restoration completes successfully
+   * @throws {string} Rejects with "Backup File does not exist" if aterm_backup.tar is not found
+   * @throws {string} Rejects with command output if restoration fails
+   * @example
+   * try {
+   *   await restore();
+   *   console.log("Alpine installation restored successfully");
+   * } catch (error) {
+   *   console.error(`Restore failed: ${error}`);
+   * }
+   */
+  restore() {
+    return new Promise(async (resolve, reject) => {
+      if (await this.isAxsRunning()) {
+        await this.stopAxs();
+      }
 
-            const cmd = `
+      const cmd = `
             set -e
 
             INCLUDE_FILES="$PREFIX/alpine $PREFIX/ubuntu $PREFIX/debian $PREFIX/.downloaded $PREFIX/.extracted $PREFIX/.configured $PREFIX/axs"
@@ -673,38 +763,38 @@ const Terminal = {
             echo "ok"
             `;
 
-            const result = await Executor.BackgroundExecutor.execute(cmd);
-            if (result === "ok") {
-                resolve(result);
-            } else {
-                reject(result);
-            }
-        });
-    },
-    /**
-     * Uninstalls the Alpine Linux installation
-     * @async
-     * @function uninstall
-     * @description Completely removes the Alpine Linux installation from the device by deleting all
-     * Alpine-related files and directories. This function stops any running Alpine processes before
-     * removal. NOTE: This does not perform cleanup of $PREFIX
-     * @returns {Promise<string>} Promise that resolves to "ok" when uninstallation completes successfully
-     * @throws {string} Rejects with command output if uninstallation fails
-     * @example
-     * try {
-     *   await uninstall();
-     *   console.log("Alpine installation removed successfully");
-     * } catch (error) {
-     *   console.error(`Uninstall failed: ${error}`);
-     * }
-     */
-    uninstall() {
-        return new Promise(async (resolve, reject) => {
-            if (await this.isAxsRunning()) {
-                await this.stopAxs();
-            }
+      const result = await Executor.BackgroundExecutor.execute(cmd);
+      if (result === "ok") {
+        resolve(result);
+      } else {
+        reject(result);
+      }
+    });
+  },
+  /**
+   * Uninstalls the Alpine Linux installation
+   * @async
+   * @function uninstall
+   * @description Completely removes the Alpine Linux installation from the device by deleting all
+   * Alpine-related files and directories. This function stops any running Alpine processes before
+   * removal. NOTE: This does not perform cleanup of $PREFIX
+   * @returns {Promise<string>} Promise that resolves to "ok" when uninstallation completes successfully
+   * @throws {string} Rejects with command output if uninstallation fails
+   * @example
+   * try {
+   *   await uninstall();
+   *   console.log("Alpine installation removed successfully");
+   * } catch (error) {
+   *   console.error(`Uninstall failed: ${error}`);
+   * }
+   */
+  uninstall() {
+    return new Promise(async (resolve, reject) => {
+      if (await this.isAxsRunning()) {
+        await this.stopAxs();
+      }
 
-            const cmd = `
+      const cmd = `
             set -e
 
             INCLUDE_FILES="$PREFIX/alpine $PREFIX/ubuntu $PREFIX/debian $PREFIX/.downloaded $PREFIX/.extracted $PREFIX/.configured $PREFIX/axs"
@@ -719,90 +809,172 @@ const Terminal = {
 
             echo "ok"
             `;
-            const result = await Executor.BackgroundExecutor.execute(cmd);
-            if (result === "ok") {
-                resolve(result);
-            } else {
-                reject(result);
-            }
-        });
-    },
+      const result = await Executor.BackgroundExecutor.execute(cmd);
+      if (result === "ok") {
+        resolve(result);
+      } else {
+        reject(result);
+      }
+    });
+  },
 
-    /**
-     * Installs Myra Deep Research Assistant in the terminal environment.
-     * @param {Function} [logger=console.log] - Function to log standard output.
-     * @param {Function} [err_logger=console.error] - Function to log errors.
-     * @returns {Promise<string>} - Returns "ok" when installation completes
-     */
-    installMyra(logger = console.log, err_logger = console.error) {
-        return new Promise(async (resolve, reject) => {
-            const filesDir = await new Promise((resolve, reject) => {
-                system.getFilesDir(resolve, reject);
-            });
+  /**
+   * Installs Myra Deep Research Assistant in the terminal environment.
+   * @param {Function} [logger=console.log] - Function to log standard output.
+   * @param {Function} [err_logger=console.error] - Function to log errors.
+   * @returns {Promise<string>} - Returns "ok" when installation completes
+   */
+  installMyra(logger = console.log, err_logger = console.error) {
+    return new Promise(async (resolve, reject) => {
+      const filesDir = await new Promise((resolve, reject) => {
+        system.getFilesDir(resolve, reject);
+      });
 
-            try {
-                logger("📦 Installing Myra Deep Research Assistant...");
+      try {
+        logger("📦 Installing Myra Deep Research Assistant...");
 
-                // Check if Node.js is installed
-                const nodeCheck = await Executor.execute("which node || echo 'not-found'");
-                if (nodeCheck.includes("not-found")) {
-                    logger("📥 Node.js not found, attempting to install...");
-                    const isFdroid = await Executor.execute("echo $FDROID");
-                    if (isFdroid === "true") {
-                        await Executor.execute("apk add --no-cache nodejs npm");
-                    } else {
-                        await Executor.execute("apt-get update && apt-get install -y nodejs npm");
-                    }
-                }
+        // Check if Node.js is installed
+        const nodeCheck = await Executor.execute(
+          "which node || echo 'not-found'",
+        );
+        if (nodeCheck.includes("not-found")) {
+          logger("📥 Node.js not found, attempting to install...");
+          const isFdroid = await Executor.execute("echo $FDROID");
+          if (isFdroid === "true") {
+            await Executor.execute("apk add --no-cache nodejs npm");
+          } else {
+            await Executor.execute(
+              "apt-get update && apt-get install -y nodejs npm",
+            );
+          }
+        }
 
-                // Verify Node.js
-                const nodeVersion = await Executor.execute("node --version");
-                logger(`✅ Node.js installed: ${nodeVersion}`);
+        // Verify Node.js
+        const nodeVersion = await Executor.execute("node --version");
+        logger(`✅ Node.js installed: ${nodeVersion}`);
 
-                // Create installation directory
-                await Executor.execute("mkdir -p /usr/local/lib/myra");
+        // Create installation directory
+        await Executor.execute("mkdir -p /usr/local/lib/myra");
 
-                // Extract Myra bundle
-                const extractCmd = `tar -xzf ${filesDir}/assets/myra-bundle.tar.gz -C /usr/local/lib/myra`;
-                const extractResult = await Executor.execute(extractCmd);
-                logger("✅ Myra extracted");
+        // Extract Myra bundle
+        const extractCmd = `tar -xzf ${filesDir}/assets/myra-bundle.tar.gz -C /usr/local/lib/myra`;
+        const extractResult = await Executor.execute(extractCmd);
+        logger("✅ Myra extracted");
 
-                // Install dependencies
-                await Executor.execute("cd /usr/local/lib/myra && npm install --production 2>/dev/null || true");
+        // Install dependencies
+        await Executor.execute(
+          "cd /usr/local/lib/myra && npm install --production 2>/dev/null || true",
+        );
 
-                // Create wrapper script
-                const wrapperCmd = `cat > /usr/local/bin/myra << 'EOF'
+        // Create wrapper script
+        const wrapperCmd = `cat > /usr/local/bin/myra << 'EOF'
 #!/bin/bash
 node /usr/local/lib/myra/cli/index.js "$@"
 EOF
 chmod +x /usr/local/bin/myra`;
-                await Executor.execute(wrapperCmd);
+        await Executor.execute(wrapperCmd);
 
-                logger("✅ Myra installed successfully!");
-                logger("🚀 Run 'myra --help' to get started");
+        logger("✅ Myra installed successfully!");
+        logger("🚀 Run 'myra --help' to get started");
 
-                resolve("ok");
-            } catch (error) {
-                const message = formatError(error);
-                err_logger(`Myra installation failed: ${message}`);
-                reject(message);
-            }
-        });
-    },
+        resolve("ok");
+      } catch (error) {
+        const message = formatError(error);
+        err_logger(`Myra installation failed: ${message}`);
+        reject(message);
+      }
+    });
+  },
 
-    /**
-     * Migrates the legacy terminal home directories into public/MIGRATE.
-     * Older builds stored user files under alpine/home and alpine/root.
-     * After /home, /root and /public were merged into a single public
-     * directory, any files still left in the old locations are copied
-     * into public/MIGRATE (keeping their source structure) so nothing is
-     * hidden or lost. This is a no-op once the migration has run.
-     * @returns {Promise<void>}
-     */
-    async migrateLegacyHome() {
-        if (this._legacyHomeMigrated) return;
-        try {
-            const cmd = `
+  /**
+   * Starts the Omniroute MCP server in the terminal environment.
+   * @param {Function} [logger=console.log] - Function to log standard output.
+   * @param {Function} [err_logger=console.error] - Function to log errors.
+   * @returns {Promise<string>} - Returns "ok" when startup completes
+   */
+  async startOmniroute(logger = console.log, err_logger = console.error) {
+    return new Promise(async (resolve, reject) => {
+      const filesDir = await new Promise((resolve, reject) => {
+        system.getFilesDir(resolve, reject);
+      });
+
+      try {
+        logger("📦 Starting Omniroute MCP server...");
+
+        // Check if Node.js is installed
+        const nodeCheck = await Executor.execute(
+          "which node || echo 'not-found'",
+        );
+        if (nodeCheck.includes("not-found")) {
+          logger("📥 Node.js not found, attempting to install...");
+          const isFdroid = await Executor.execute("echo $FDROID");
+          if (isFdroid === "true") {
+            await Executor.execute("apk add --no-cache nodejs npm");
+          } else {
+            await Executor.execute(
+              "apt-get update && apt-get install -y nodejs npm",
+            );
+          }
+        }
+
+        // Verify Node.js
+        const nodeVersion = await Executor.execute("node --version");
+        logger(`✅ Node.js installed: ${nodeVersion}`);
+
+        // Create installation directory
+        await Executor.execute("mkdir -p /usr/local/lib/omniroute");
+
+        // Copy Omniroute bundle (assuming it's in the terminal assets)
+        const bundlePath = `${filesDir}/assets/omniroute-bundle.tar.gz`;
+        if (!(await Executor.execute(`test -f ${bundlePath}`))) {
+          logger("❌ Omniroute bundle not found");
+          reject(new Error("Omniroute bundle not found"));
+          return;
+        }
+
+        await Executor.execute(
+          `tar -xzf ${bundlePath} -C /usr/local/lib/omniroute`,
+        );
+        logger("✅ Omniroute extracted");
+
+        // Install dependencies
+        await Executor.execute(
+          "cd /usr/local/lib/omniroute && npm install --production 2>/dev/null || true",
+        );
+
+        // Create wrapper script
+        const wrapperCmd = `cat > /usr/local/bin/omniroute << 'EOF'
+#!/bin/bash
+node /usr/local/lib/omniroute/cli/index.js "$@"
+EOF
+chmod +x /usr/local/bin/omniroute`;
+        await Executor.execute(wrapperCmd);
+
+        logger("✅ Omniroute started successfully!");
+        logger("🚀 Ready to accept MCP tool calls.");
+
+        resolve("ok");
+      } catch (error) {
+        const message = formatError(error);
+        err_logger(`Omniroute startup failed: ${message}`);
+        reject(message);
+      }
+    });
+  },
+
+  /**
+   * Migrates the legacy terminal home directories into public/MIGRATE.
+   * Older builds stored user files under alpine/home and alpine/root.
+   * After /home, /root and /public were merged into a single public
+   * directory, any files still left in the old locations are copied
+   * into public/MIGRATE (keeping their source structure) so nothing is
+   * hidden or lost. This is a no-op once the migration has run.
+   * @returns {Promise<void>}
+   */
+  async migrateLegacyHome() {
+    if (this._legacyHomeMigrated) return;
+    try {
+      const cmd = `
                 MIGRATE="$PREFIX/public/MIGRATE"
 
                 # Already migrated
@@ -833,104 +1005,119 @@ chmod +x /usr/local/bin/myra`;
                     touch "$MIGRATE/.migrated"
                 fi
             `;
-            await Executor.BackgroundExecutor.execute(cmd);
-            this._legacyHomeMigrated = true;
-        } catch (error) {
-            console.error("Failed to migrate legacy terminal home:", formatError(error));
-        }
-    },
+      await Executor.BackgroundExecutor.execute(cmd);
+      this._legacyHomeMigrated = true;
+    } catch (error) {
+      console.error(
+        "Failed to migrate legacy terminal home:",
+        formatError(error),
+      );
+    }
+  },
 
-    formatError
+  formatError,
 };
 
-
 function readAsset(assetPath, callback) {
-    const assetUrl = "file:///android_asset/" + assetPath;
+  const assetUrl = "file:///android_asset/" + assetPath;
 
-    const promise = new Promise((resolve, reject) => {
-        window.resolveLocalFileSystemURL(assetUrl, fileEntry => {
-            fileEntry.file(file => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result);
-                reader.onerror = () => reject(reader.error || new Error(`Failed to read ${assetPath}`));
-                reader.readAsText(file);
-            }, reject);
+  const promise = new Promise((resolve, reject) => {
+    window.resolveLocalFileSystemURL(
+      assetUrl,
+      (fileEntry) => {
+        fileEntry.file((file) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.onerror = () =>
+            reject(reader.error || new Error(`Failed to read ${assetPath}`));
+          reader.readAsText(file);
         }, reject);
-    });
+      },
+      reject,
+    );
+  });
 
-    if (callback) {
-        promise.then(callback).catch(console.error);
-    }
+  if (callback) {
+    promise.then(callback).catch(console.error);
+  }
 
-    return promise;
+  return promise;
 }
 
 function fileExists(path) {
-    return new Promise((resolve, reject) => {
-        system.fileExists(path, false, (result) => {
-            resolve(result == 1);
-        }, reject);
-    });
+  return new Promise((resolve, reject) => {
+    system.fileExists(
+      path,
+      false,
+      (result) => {
+        resolve(result == 1);
+      },
+      reject,
+    );
+  });
 }
 
 async function ensureDir(path) {
-    if (await fileExists(path)) return;
+  if (await fileExists(path)) return;
 
-    await new Promise((resolve, reject) => {
-        system.mkdirs(path, resolve, reject);
-    });
+  await new Promise((resolve, reject) => {
+    system.mkdirs(path, resolve, reject);
+  });
 }
 
 function writeText(path, content) {
-    return new Promise((resolve, reject) => {
-        system.writeText(path, content, resolve, reject);
-    });
+  return new Promise((resolve, reject) => {
+    system.writeText(path, content, resolve, reject);
+  });
 }
 
 function deleteFile(path) {
-    return new Promise((resolve, reject) => {
-        system.deleteFile(path, resolve, reject);
-    });
+  return new Promise((resolve, reject) => {
+    system.deleteFile(path, resolve, reject);
+  });
 }
 
 function setExec(path, executable) {
-    return new Promise((resolve, reject) => {
-        system.setExec(path, executable, resolve, reject);
-    });
+  return new Promise((resolve, reject) => {
+    system.setExec(path, executable, resolve, reject);
+  });
 }
 
 function downloadFile(url, destination, label) {
-    return new Promise((resolve, reject) => {
-        cordova.plugin.http.downloadFile(
-            url, {}, {},
-            destination,
-            resolve,
-            (error) => reject(new Error(`${label} download failed: ${formatError(error)}`))
-        );
-    });
+  return new Promise((resolve, reject) => {
+    cordova.plugin.http.downloadFile(
+      url,
+      {},
+      {},
+      destination,
+      resolve,
+      (error) =>
+        reject(new Error(`${label} download failed: ${formatError(error)}`)),
+    );
+  });
 }
 
 function formatError(error) {
-    if (error == null) return "Unknown error";
-    if (error instanceof Error) return error.message || String(error);
-    if (typeof error === "string") return error || "Unknown error";
-    if (typeof error === "object") {
-        const parts = [];
-        if (error.status != null) parts.push(`status ${error.status}`);
-        if (error.error) parts.push(String(error.error));
-        if (error.message) parts.push(String(error.message));
-        if (error.exception) parts.push(String(error.exception));
-        if (error.url) parts.push(`URL: ${error.url}`);
-        if (parts.length) return parts.join(" - ");
+  if (error == null) return "Unknown error";
+  if (error instanceof Error) return error.message || String(error);
+  if (typeof error === "string") return error || "Unknown error";
+  if (typeof error === "object") {
+    const parts = [];
+    if (error.status != null) parts.push(`status ${error.status}`);
+    if (error.error) parts.push(String(error.error));
+    if (error.message) parts.push(String(error.message));
+    if (error.exception) parts.push(String(error.exception));
+    if (error.url) parts.push(`URL: ${error.url}`);
+    if (parts.length) return parts.join(" - ");
 
-        try {
-            return JSON.stringify(error);
-        } catch (jsonError) {
-            return String(error);
-        }
+    try {
+      return JSON.stringify(error);
+    } catch (jsonError) {
+      return String(error);
     }
+  }
 
-    return String(error);
+  return String(error);
 }
 
 module.exports = Terminal;

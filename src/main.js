@@ -814,6 +814,74 @@ async function loadApp() {
 	);
 
 	/**
+	 * Auto-start Myra and Omniroute MCP servers when Acode launches.
+	 * These services are started in the terminal sandbox and exposed
+	 * as MCP servers for LLM integration.
+	 */
+	function autoStartMcpServers() {
+		const terminalSettings = appSettings.value.terminalSettings || {};
+		const autoStart = terminalSettings.autoStartMcp !== false;
+
+		if (!autoStart) {
+			console.log(
+				"[MCP] Auto-start disabled; skipping Myra/Omniroute startup.",
+			);
+			return;
+		}
+
+		const ensureTerminal = () =>
+			new Promise((resolve, reject) => {
+				import(/* webpackChunkName: "terminal" */ "components/terminal").then(
+					({ TerminalManager }) => resolve(TerminalManager),
+					reject,
+				);
+			});
+
+		ensureTerminal()
+			.then(async (TerminalManager) => {
+				const isSupported = await TerminalManager.isSupported();
+				if (!isSupported) {
+					console.warn("[MCP] Terminal not supported; skipping auto-start.");
+					return;
+				}
+
+				const hasSandbox = await TerminalManager.hasSandbox();
+				if (!hasSandbox) {
+					console.warn("[MCP] No terminal sandbox found; skipping auto-start.");
+					return;
+				}
+
+				// Start Myra in the terminal sandbox
+				try {
+					await TerminalManager.installMyra(
+						(msg) => console.log("[Myra]", msg),
+						(err) => console.error("[Myra]", err),
+					);
+					console.log("[MCP] Myra auto-started successfully.");
+				} catch (error) {
+					console.warn("[MCP] Myra auto-start failed:", error);
+				}
+
+				// Start Omniroute MCP server
+				try {
+					await TerminalManager.startOmniroute(
+						(msg) => console.log("[Omniroute]", msg),
+						(err) => console.error("[Omniroute]", err),
+					);
+					console.log("[MCP] Omniroute auto-started successfully.");
+				} catch (error) {
+					console.warn("[MCP] Omniroute auto-start failed:", error);
+				}
+			})
+			.catch((error) => {
+				console.error("[MCP] Auto-start failed:", error);
+			});
+	}
+
+	// Delay auto-start slightly so the UI renders first
+	setTimeout(autoStartMcpServers, 3000);
+
+	/**
 	 *
 	 * @param {MouseEvent} e
 	 */

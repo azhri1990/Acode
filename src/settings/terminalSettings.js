@@ -284,6 +284,13 @@ export default function terminalSettings() {
 				"Choose which Linux distribution to install in the terminal sandbox. Ubuntu and Debian require internet access on first run.",
 			category: categories.maintenance,
 		},
+		{
+			key: "autoStartMcp",
+			text: "Auto-start Myra & Omniroute on launch",
+			checkbox: terminalValues.autoStartMcp !== false,
+			info: "Automatically start Myra and Omniroute MCP servers when Acode launches.",
+			category: categories.maintenance,
+		},
 	];
 
 	return settingsPage(title, items, callback, undefined, {
