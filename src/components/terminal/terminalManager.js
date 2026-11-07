@@ -1274,6 +1274,25 @@ class TerminalManager {
 		return normalized.pop() || "folder";
 	}
 
+	static async installMyra(logger = console.log, err_logger = console.error) {
+		return Terminal.installMyra(logger, err_logger);
+	}
+
+	static async startOmniroute(
+		logger = console.log,
+		err_logger = console.error,
+	) {
+		return Terminal.startOmniroute(logger, err_logger);
+	}
+
+	static isSupported() {
+		return Terminal.isSupported();
+	}
+
+	static hasSandbox() {
+		return Terminal.isAxsRunning();
+	}
+
 	shouldConfirmTerminalClose() {
 		const settings = appSettings?.value?.terminalSettings;
 		if (settings && settings.confirmTabClose === false) {
